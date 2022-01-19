@@ -8,6 +8,20 @@ use quote::quote;
 use syn::spanned::Spanned;
 use syn::{parse_macro_input, FnArg, Pat};
 
+/// Make a restful http client
+///
+/// # Examlples
+///
+/// ```
+/// #[client(host = "http://127.0.0.1:3000", path = "/user")]
+/// pub trait UserClient {
+///     #[get(path = "/find_by_id/<id>")]
+///     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
+///    #[post(path = "/new_user")]
+///     async fn new_user(&self, #[json] user: &User) -> Result<Option<String>, Box<dyn std::error::Error>>;
+/// }
+/// ```
+///
 #[proc_macro_error(proc_macro_hack)]
 #[proc_macro_attribute]
 pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -20,7 +34,8 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let vis = &input.vis;
     let name = &input.ident;
-    let base_url = &args.url;
+    let base_host = &args.host;
+    let base_path = &args.path;
 
     let methods = input
         .items
@@ -29,16 +44,25 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
             syn::TraitItem::Method(m) => Some(m),
             _ => None,
         })
-        .map(|m| gen_method(m, base_url));
+        .map(|m| gen_method(m));
 
     let tokens = quote! {
         #vis struct #name {
+            host: tokio::sync::Mutex<String>,
+            path: String,
         }
 
         impl #name {
 
             fn new() -> Self{
-                Self{}
+                Self{
+                    host: tokio::sync::Mutex::new(String::from(#base_host)),
+                    path: String::from(#base_path),
+                }
+            }
+
+            async fn context(&self) -> String {
+                format!("{}{}", self.host.lock().await, self.path)
             }
 
             #(#methods)*
@@ -48,7 +72,8 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
     tokens.into()
 }
 
-fn gen_method(method: &syn::TraitItemMethod, base_url: &str) -> proc_macro2::TokenStream {
+/// Gen feign methods
+fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
     if method.sig.asyncness.is_none() {
         abort!(
             &method.sig.span(),
@@ -104,12 +129,12 @@ fn gen_method(method: &syn::TraitItemMethod, base_url: &str) -> proc_macro2::Tok
         .for_each(|(ty, p)| match &*p.to_string() {
             "path" => path_variables.push(&ty.pat),
             "query" => querys.push(&ty.pat),
-            "body" => match body {
-                None => body = Some(Form(&ty.pat)),
+            "json" => match body {
+                None => body = Some(Json(&ty.pat)),
                 _ => abort!(&method.sig.span(), "json or form only once"),
             },
             "form" => match body {
-                None => body = Some(Json(&ty.pat)),
+                None => body = Some(Form(&ty.pat)),
                 _ => abort!(&method.sig.span(), "json or form only once"),
             },
             other => abort!(
@@ -169,7 +194,7 @@ fn gen_method(method: &syn::TraitItemMethod, base_url: &str) -> proc_macro2::Tok
     quote! {
         pub async fn #name(&self, #inputs) #output {
             let path = String::from(#req_path)#path_variables;
-            let url = format!("{}{}", #base_url, path);
+            let url = format!("{}{}", self.context().await, path);
             Ok(reqwest::ClientBuilder::new()
                 .build()?
                 .#http_method_ident(url.as_str())
@@ -183,6 +208,7 @@ fn gen_method(method: &syn::TraitItemMethod, base_url: &str) -> proc_macro2::Tok
     }
 }
 
+/// http methods enumed
 enum HttpMethod {
     Get,
     Post,
@@ -206,16 +232,20 @@ impl HttpMethod {
     }
 }
 
+/// body types
 enum Body<'a> {
     Form(&'a Box<Pat>),
     Json(&'a Box<Pat>),
 }
 
+/// Args of client
 #[derive(Debug, FromMeta)]
 struct ClientArgs {
-    pub url: String,
+    pub host: String,
+    pub path: String,
 }
 
+/// Args of request
 #[derive(Debug, FromMeta)]
 struct Request {
     pub path: String,

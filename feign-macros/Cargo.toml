@@ -2,16 +2,16 @@
 name = "feign-macros"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["niuhuan <niuhuancn@outlook.com>"]
+description = "Rest client of Rust"
+license = "MIT"
 
 [dependencies]
-darling = "0.13.1"
-proc-macro-error = "1.0.4"
-proc-macro2 = "1.0.36"
-quote = "1.0.14"
-syn = "1.0.85"
-tokio = { version = "1.15.0", features = ["macros"] }
+darling = "0"
+proc-macro-error = "1"
+proc-macro2 = "1"
+quote = "1"
+syn = "1"
 
 [lib]
 proc-macro = true
