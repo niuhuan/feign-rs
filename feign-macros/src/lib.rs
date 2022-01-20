@@ -34,7 +34,10 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let vis = &input.vis;
     let name = &input.ident;
-    let base_host = &args.host;
+    let base_host = &match args.host {
+        None => String::from(""),
+        Some(value) => value,
+    };
     let base_path = &args.path;
 
     let methods = input
@@ -59,6 +62,11 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
                     host: tokio::sync::Mutex::new(String::from(#base_host)),
                     path: String::from(#base_path),
                 }
+            }
+
+            async fn configure_host(&self, host: String) {
+                let mut lock = self.host.lock().await;
+                *lock = host;
             }
 
             async fn context(&self) -> String {
@@ -241,7 +249,8 @@ enum Body<'a> {
 /// Args of client
 #[derive(Debug, FromMeta)]
 struct ClientArgs {
-    pub host: String,
+    #[darling(default)]
+    pub host: Option<String>,
     pub path: String,
 }
 

@@ -9,7 +9,7 @@ pub struct User {
     pub name: String,
 }
 
-#[client(host = "http://127.0.0.1:3000", path = "/user")]
+#[client(path = "/user")]
 pub trait UserClient {
     #[get(path = "/find_by_id/<id>")]
     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
@@ -20,6 +20,9 @@ pub trait UserClient {
 #[tokio::main]
 async fn main() {
     let user_client: UserClient = UserClient::new();
+    user_client
+        .configure_host(String::from("http://127.0.0.1:3000"))
+        .await;
 
     match user_client.find_by_id(12).await {
         Ok(option) => match option {

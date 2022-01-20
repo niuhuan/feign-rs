@@ -52,7 +52,7 @@ pub struct User {
 
 ### Feign client
 
-- Use feign::client macro and trait make a feign client, host is server address, path is controller context. (In the future, the host can be dynamically replaced and can be ignored)
+- Use feign::client macro and trait make a feign client, host is server address, path is controller context. (The host can be dynamically replaced and can be ignored)
 - In the trait, use the method macro and path args make a request, the member method must async and first arg is recover(&self)
 - Use #\[json] / #\[form] post body, use #\[path] for replace \<arg_name> in request path
 
@@ -104,4 +104,20 @@ async fn main() {
 ```text
 user : hello
 result : name
+```
+
+### Dynamic modify host with configure_host
+
+```rust
+#[client(path = "/user")]
+pub trait UserClient {
+}
+
+#[tokio::main]
+async fn main() {
+    let user_client: UserClient = UserClient::new();
+    user_client
+        .configure_host(String::from("http://127.0.0.1:3000"))
+        .await;
+}
 ```
