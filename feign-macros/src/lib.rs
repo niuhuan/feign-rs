@@ -61,8 +61,10 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
         })
         .map(|m| gen_method(m, args.before_send.as_ref(), &reqwest_client_builder));
 
-    let tokens = quote! {
+    let builder_name: proc_macro2::TokenStream =
+        format!("{}Builder", quote! {#name}).parse().unwrap();
 
+    let tokens = quote! {
 
         #[derive(Debug, Clone)]
         #vis struct #name {
@@ -79,8 +81,43 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
+            pub fn new_with_builder(host: String) -> Self {
+                Self{
+                    host: host,
+                    path: String::from(#base_path),
+                }
+            }
+
+            pub fn builder() -> #builder_name {
+                #builder_name::new()
+            }
+
             #(#methods)*
         }
+
+        #vis struct #builder_name {
+            host: String,
+        }
+
+        impl #builder_name {
+
+            pub fn new() -> Self {
+                Self{
+                    host: String::from(#base_host),
+                }
+            }
+
+            pub fn build(&self) -> #name {
+                #name::new_with_builder(self.host.clone())
+            }
+
+            pub fn set_host(mut self, host: String) -> Self {
+                self.host = host;
+                self
+            }
+
+        }
+
     };
 
     tokens.into()

@@ -60,7 +60,9 @@ pub trait UserClient {
 
 #[tokio::main]
 async fn main() {
-    let user_client: UserClient = UserClient::new();
+    let user_client: UserClient = UserClient::builder()
+        .set_host(String::from("http://127.0.0.1:3001"))
+        .build();
 
     match user_client.find_by_id(12).await {
         Ok(option) => match option {

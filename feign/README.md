@@ -122,7 +122,7 @@ result : name
     ) -> ClientResult<Option<User>>;
 ```
 
-### Dynamic modify host with configure_host
+### Dynamic modify host with set_host
 
 ```rust
 #[client(path = "/user")]
@@ -130,10 +130,9 @@ pub trait UserClient {}
 
 #[tokio::main]
 async fn main() {
-    let user_client: UserClient = UserClient::new();
-    user_client
-        .configure_host(String::from("http://127.0.0.1:3000"))
-        .await;
+  let user_client: UserClient = UserClient::builder()
+          .set_host(String::from("http://127.0.0.1:3001"))
+          .build();
 }
 ```
 
