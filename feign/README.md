@@ -2,7 +2,6 @@
 Feign-RS (Rest client of Rust)
 </h1>
 
-
 ## How to use
 
 ### Demo server
@@ -52,8 +51,10 @@ pub struct User {
 
 ### Feign client
 
-- Use feign::client macro and trait make a feign client, host is server address, path is controller context. (The host can be dynamically replaced and can be ignored)
-- In the trait, use the method macro and path args make a request, the member method must async and first arg is recover(&self)
+- Use feign::client macro and trait make a feign client, host is server address, path is controller context. (The host
+  can be dynamically replaced and can be ignored)
+- In the trait, use the method macro and path args make a request, the member method must async and first arg is
+  recover(&self)
 - Use #\[json] / #\[form] post body, use #\[path] for replace \<arg_name> in request path
 
 ```rust
@@ -71,7 +72,7 @@ pub trait UserClient {
 
 ### Demo
 
-Use 
+Use
 
 ```rust
 #[tokio::main]
@@ -101,6 +102,7 @@ async fn main() {
     };
 }
 ```
+
 ```text
 user : hello
 result : name
@@ -112,8 +114,7 @@ result : name
 
 ```rust
 #[client(path = "/user")]
-pub trait UserClient {
-}
+pub trait UserClient {}
 
 #[tokio::main]
 async fn main() {
@@ -136,10 +137,60 @@ async fn client_builder() -> ClientResult<reqwest::Client> {
 }
 
 #[client(
-    host = "http://127.0.0.1:3000",
-    path = "/user",
-    client_builder = "client_builder"
+host = "http://127.0.0.1:3000",
+path = "/user",
+client_builder = "client_builder"
+)]
+pub trait UserClient {}
+```
+
+### Customer additional reqwest request builder
+
+#### before_send
+
+If you want check hash of json body, sign to header. Or log the request.
+
+```rust
+async fn before_send(
+    request_builder: reqwest::RequestBuilder,
+    http_method: HttpMethod,
+    host: String,
+    client_path: String,
+    request_path: String,
+    body: RequestBody,
+) -> ClientResult<reqwest::RequestBuilder> {
+    println!(
+        "============= (Before_send)\n\
+            {:?} => {}{}{}\n\
+            {:?}",
+        http_method, host, client_path, request_path, body
+    );
+    Ok(request_builder.header("a", "b"))
+}
+```
+
+Set before_send arg with function name
+
+```rust
+#[client(
+host = "http://127.0.0.1:3000",
+path = "/user",
+client_builder = "client_builder",
+before_send = "before_send"
 )]
 pub trait UserClient {
+    #[get(path = "/find_by_id/<id>")]
+    async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
+    #[post(path = "/new_user")]
+    async fn new_user(&self, #[json] user: &User) -> ClientResult<Option<String>>;
 }
+```
+
+```text
+============= (Before_send)
+Get => http://127.0.0.1:3000/user/find_by_id/12
+None
+============= (Before_send)
+Post => http://127.0.0.1:3000/user/new_user
+Json(Object({"id": Number(123), "name": String("name")}))
 ```

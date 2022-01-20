@@ -1,5 +1,5 @@
 [package]
-name = "feign-macros"
+name = "feign-common"
 version = "0.1.2"
 edition = "2021"
 authors = ["niuhuan <niuhuancn@outlook.com>"]
@@ -8,12 +8,8 @@ license = "MIT"
 repository = "https://github.com/niuhuan/feign-rs"
 
 [dependencies]
-feign-common = { path = "../feign-common" }
-darling = "0"
-proc-macro-error = "1"
-proc-macro2 = "1"
-quote = "1"
-syn = "1"
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
 
 [lib]
-proc-macro = true

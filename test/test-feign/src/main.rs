@@ -2,10 +2,27 @@ use serde_derive::Deserialize;
 use serde_derive::Serialize;
 use std::future::Future;
 
-use feign::{client, ClientResult};
+use feign::{client, ClientResult, HttpMethod, RequestBody};
 
 async fn client_builder() -> ClientResult<reqwest::Client> {
     Ok(reqwest::ClientBuilder::new().build().unwrap())
+}
+
+async fn before_send(
+    request_builder: reqwest::RequestBuilder,
+    http_method: HttpMethod,
+    host: String,
+    client_path: String,
+    request_path: String,
+    body: RequestBody,
+) -> ClientResult<reqwest::RequestBuilder> {
+    println!(
+        "============= (Before_send)\n\
+            {:?} => {}{}{}\n\
+            {:?}",
+        http_method, host, client_path, request_path, body
+    );
+    Ok(request_builder.header("a", "b"))
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -17,7 +34,8 @@ pub struct User {
 #[client(
     host = "http://127.0.0.1:3000",
     path = "/user",
-    client_builder = "client_builder"
+    client_builder = "client_builder",
+    before_send = "before_send"
 )]
 pub trait UserClient {
     #[get(path = "/find_by_id/<id>")]

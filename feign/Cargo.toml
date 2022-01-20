@@ -8,6 +8,7 @@ license = "MIT"
 repository = "https://github.com/niuhuan/feign-rs"
 
 [dependencies]
-feign-macros = "0.1.2"
+feign-macros = { path = "../feign-macros" }
+feign-common = { path = "../feign-common" }
 
 [lib]

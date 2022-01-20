@@ -1,7 +1,8 @@
 extern crate proc_macro;
 
-use crate::Body::{Form, Json};
+use crate::RequestBody::{Form, Json};
 use darling::FromMeta;
+use feign_common::*;
 use proc_macro::TokenStream;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
@@ -63,6 +64,34 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
         },
     };
 
+    let before_send_builder = match args.before_send {
+        Some(builder) => {
+            let builder_token: proc_macro2::TokenStream = builder.parse().unwrap();
+            quote! {
+                Some(Box::new(
+                    |request_builder: reqwest::RequestBuilder,
+                     http_method: HttpMethod,
+                     host: String,
+                     client_path: String,
+                     request_path: String,
+                     body: RequestBody| {
+                        Box::pin(#builder_token(
+                            request_builder,
+                            http_method,
+                            host,
+                            client_path,
+                            request_path,
+                            body,
+                        ))
+                    },
+                ))
+            }
+        }
+        None => quote! {
+            None
+        },
+    };
+
     let tokens = quote! {
         #vis struct #name {
             host: tokio::sync::Mutex<String>,
@@ -70,7 +99,28 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
             reqwest_client_builder: Box<dyn Fn() -> std::pin::Pin<
                 Box<dyn Future<
                     Output = Result<reqwest::Client, Box<dyn std::error::Error + Send + Sync>>
-                >>>
+                >>
+            >>,
+            before_send_builder: Option<
+                Box<
+                    dyn Fn(
+                        reqwest::RequestBuilder,
+                        feign::HttpMethod,
+                        String,
+                        String,
+                        String,
+                        feign::RequestBody,
+                    ) -> std::pin::Pin<
+                        Box<
+                            dyn Future<
+                                Output = Result<
+                                    reqwest::RequestBuilder,
+                                    Box<dyn std::error::Error + Send + Sync>,
+                                >,
+                            >,
+                        >,
+                    >,
+                >,
             >,
         }
 
@@ -81,6 +131,7 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
                     host: tokio::sync::Mutex::new(String::from(#base_host)),
                     path: String::from(#base_path),
                     reqwest_client_builder: #reqwest_client_builder,
+                    before_send_builder: #before_send_builder,
                 }
             }
 
@@ -89,8 +140,8 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
                 *lock = host;
             }
 
-            async fn context(&self) -> String {
-                format!("{}{}", self.host.lock().await, self.path)
+            async fn host(&self) -> String {
+                format!("{}", self.host.lock().await)
             }
 
             #(#methods)*
@@ -120,7 +171,7 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
         }
     };
 
-    let _http_method = if let Some(m) = HttpMethod::from_ident(http_method_ident) {
+    let _http_method = if let Some(m) = http_method_from_ident(http_method_ident) {
         m
     } else {
         abort!(
@@ -128,6 +179,8 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
             "Expect one of get, post, put, patch, delete, head."
         )
     };
+
+    let _http_method_token = http_method_to_token(_http_method);
 
     let request: Request = match Request::from_meta(&match attr.unwrap().parse_meta() {
         Ok(a) => a,
@@ -192,7 +245,7 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
         }
     };
 
-    let body = match body {
+    let req_body = match body {
         None => quote! {},
         Some(Form(form)) => quote! {
             .form(#form)
@@ -202,9 +255,21 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
         },
     };
 
+    let request_builder_body = match body {
+        None => quote! {
+            feign::RequestBody::None
+        },
+        Some(Form(form)) => quote! {
+            feign::RequestBody::Json(serde_json::to_value(#form)?)
+        },
+        Some(Json(json)) => quote! {
+            feign::RequestBody::Json(serde_json::to_value(#json)?)
+        },
+    };
+
     let params = quote! {
         #query
-        #body
+        #req_body
     };
 
     let inputs = inputs
@@ -221,12 +286,27 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
 
     quote! {
         pub async fn #name(&self, #inputs) #output {
-            let path = String::from(#req_path)#path_variables;
-            let url = format!("{}{}", self.context().await, path);
+            let host = self.host().await;
+            let client_path = self.path.clone();
+            let request_path = String::from(#req_path)#path_variables;
+            let url = format!("{}{}{}", host, client_path, request_path);
             let client: reqwest::Client = (self.reqwest_client_builder)().await?;
-            Ok(client
+            let req = match Option::as_ref(&self.before_send_builder) {
+                Some(before_send_builder) => before_send_builder(
+                    client
+                        .#http_method_ident(url.as_str())
+                        #params,
+                    #_http_method_token,
+                    host,
+                    client_path,
+                    request_path,
+                    #request_builder_body,
+                ).await?,
+                None => client
                 .#http_method_ident(url.as_str())
-                #params
+                #params,
+            };
+            Ok(req
                 .send()
                 .await?
                 .error_for_status()?
@@ -236,32 +316,33 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
     }
 }
 
-/// http methods enumed
-enum HttpMethod {
-    Get,
-    Post,
-    Put,
-    Patch,
-    Delete,
-    Head,
+fn http_method_from_ident(ident: &syn::Ident) -> Option<HttpMethod> {
+    Some(match &*ident.to_string() {
+        "get" => HttpMethod::Get,
+        "post" => HttpMethod::Post,
+        "put" => HttpMethod::Put,
+        "patch" => HttpMethod::Patch,
+        "delete" => HttpMethod::Delete,
+        "head" => HttpMethod::Head,
+        _ => return None,
+    })
 }
 
-impl HttpMethod {
-    fn from_ident(ident: &syn::Ident) -> Option<Self> {
-        Some(match &*ident.to_string() {
-            "get" => HttpMethod::Get,
-            "post" => HttpMethod::Post,
-            "put" => HttpMethod::Put,
-            "patch" => HttpMethod::Patch,
-            "delete" => HttpMethod::Delete,
-            "head" => HttpMethod::Head,
-            _ => return None,
-        })
+fn http_method_to_token(method: HttpMethod) -> proc_macro2::TokenStream {
+    match method {
+        HttpMethod::Get => "feign::HttpMethod::Get",
+        HttpMethod::Post => "feign::HttpMethod::Post",
+        HttpMethod::Put => "feign::HttpMethod::Put",
+        HttpMethod::Patch => "feign::HttpMethod::Patch",
+        HttpMethod::Delete => "feign::HttpMethod::Delete",
+        HttpMethod::Head => "feign::HttpMethod::Head",
     }
+    .parse()
+    .unwrap()
 }
 
 /// body types
-enum Body<'a> {
+enum RequestBody<'a> {
     Form(&'a Box<Pat>),
     Json(&'a Box<Pat>),
 }
@@ -274,6 +355,8 @@ struct ClientArgs {
     pub path: String,
     #[darling(default)]
     pub client_builder: Option<String>,
+    #[darling(default)]
+    pub before_send: Option<String>,
 }
 
 /// Args of request
