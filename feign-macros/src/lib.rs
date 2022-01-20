@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
 use syn::spanned::Spanned;
-use syn::{parse_macro_input, FnArg};
+use syn::{parse_macro_input, FnArg, TraitItemMethod};
 
 /// Make a restful http client
 ///
@@ -32,6 +32,18 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
         Err(e) => return TokenStream::from(e.write_errors()),
     };
 
+    let reqwest_client_builder = match args.client_builder {
+        Some(builder) => {
+            let builder_token: proc_macro2::TokenStream = builder.parse().unwrap();
+            quote! {
+                #builder_token().await?
+            }
+        }
+        None => quote! {
+            reqwest::ClientBuilder::new().build()?
+        },
+    };
+
     let vis = &input.vis;
     let name = &input.ident;
     let base_host = &match args.host {
@@ -47,103 +59,24 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
             syn::TraitItem::Method(m) => Some(m),
             _ => None,
         })
-        .map(|m| gen_method(m));
-
-    let reqwest_client_builder = match args.client_builder {
-        Some(builder) => {
-            let builder_token: proc_macro2::TokenStream = builder.parse().unwrap();
-            quote! {
-                Box::new(|| Box::pin(#builder_token()))
-            }
-        }
-        None => quote! {
-            Box::new(|| Box::pin(async {
-                        Ok(reqwest::ClientBuilder::new().build()?)
-                    }))
-        },
-    };
-
-    let before_send_builder = match args.before_send {
-        Some(builder) => {
-            let builder_token: proc_macro2::TokenStream = builder.parse().unwrap();
-            quote! {
-                Some(Box::new(
-                    |request_builder: reqwest::RequestBuilder,
-                     http_method: HttpMethod,
-                     host: String,
-                     client_path: String,
-                     request_path: String,
-                     body: RequestBody,
-                     headers: Option<std::collections::HashMap<String, String>>| {
-                        Box::pin(#builder_token(
-                            request_builder,
-                            http_method,
-                            host,
-                            client_path,
-                            request_path,
-                            body,
-                            headers,
-                        ))
-                    },
-                ))
-            }
-        }
-        None => quote! {
-            None
-        },
-    };
+        .map(|m| gen_method(m, args.before_send.as_ref(), &reqwest_client_builder));
 
     let tokens = quote! {
+
+
+        #[derive(Debug, Clone)]
         #vis struct #name {
-            host: tokio::sync::Mutex<String>,
+            host: String,
             path: String,
-            reqwest_client_builder: Box<dyn Fn() -> std::pin::Pin<
-                Box<dyn Future<
-                    Output = Result<reqwest::Client, Box<dyn std::error::Error + Send + Sync>>
-                >>
-            >>,
-            before_send_builder: Option<
-                Box<
-                    dyn Fn(
-                        reqwest::RequestBuilder,
-                        feign::HttpMethod,
-                        String,
-                        String,
-                        String,
-                        feign::RequestBody,
-                        Option<std::collections::HashMap<String, String>>,
-                    ) -> std::pin::Pin<
-                        Box<
-                            dyn Future<
-                                Output = Result<
-                                    reqwest::RequestBuilder,
-                                    Box<dyn std::error::Error + Send + Sync>,
-                                >,
-                            >,
-                        >,
-                    >,
-                >,
-            >,
         }
 
         impl #name {
 
-            fn new() -> Self{
+            pub fn new() -> Self {
                 Self{
-                    host: tokio::sync::Mutex::new(String::from(#base_host)),
+                    host: String::from(#base_host),
                     path: String::from(#base_path),
-                    reqwest_client_builder: #reqwest_client_builder,
-                    before_send_builder: #before_send_builder,
                 }
-            }
-
-            async fn configure_host(&self, host: String) {
-                let mut lock = self.host.lock().await;
-                *lock = host;
-            }
-
-            async fn host(&self) -> String {
-                format!("{}", self.host.lock().await)
             }
 
             #(#methods)*
@@ -154,7 +87,11 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// Gen feign methods
-fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
+fn gen_method(
+    method: &TraitItemMethod,
+    before_send: Option<&String>,
+    reqwest_client_builder: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
     if method.sig.asyncness.is_none() {
         abort!(
             &method.sig.span(),
@@ -310,35 +247,42 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
         })
         .collect::<syn::punctuated::Punctuated<_, syn::Token![,]>>();
 
+    let before_send_builder = match before_send {
+        Some(builder) => {
+            let builder_token: proc_macro2::TokenStream = builder.clone().parse().unwrap();
+            quote! {
+                #builder_token(
+                            req,
+                            #_http_method_token,
+                            self.host.clone(),
+                            self.path.clone(),
+                            request_path.clone(),
+                            #request_builder_body,
+                            #headers_point,
+                        ).await?
+            }
+        }
+        None => quote! {
+            req
+        },
+    };
+
     quote! {
         pub async fn #name(&self, #inputs) #output {
-            let host = self.host().await;
-            let client_path = self.path.clone();
             let request_path = String::from(#req_path)#path_variables;
-            let url = format!("{}{}{}", host, client_path, request_path);
-            let client: reqwest::Client = (self.reqwest_client_builder)().await?;
-            let #header_mut req = client
+            let url = format!("{}{}{}", self.host, self.path, request_path);
+            let #header_mut req = #reqwest_client_builder
                         .#http_method_ident(url.as_str())
                         #params;
             #headers;
-            let req = match Option::as_ref(&self.before_send_builder) {
-                Some(before_send_builder) => before_send_builder(
-                    req,
-                    #_http_method_token,
-                    host,
-                    client_path,
-                    request_path,
-                    #request_builder_body,
-                    #headers_point,
-                ).await?,
-                None => req,
-            };
-            Ok(req
+            let req = #before_send_builder;
+            let text = req
                 .send()
                 .await?
                 .error_for_status()?
-                .json()
-                .await?)
+                .text()
+                .await?;
+            Ok(serde_json::from_str(text.as_str())?)
         }
     }
 }

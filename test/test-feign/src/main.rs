@@ -1,7 +1,6 @@
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 use std::collections::HashMap;
-use std::future::Future;
 
 use feign::{client, ClientResult, HttpMethod, RequestBody};
 

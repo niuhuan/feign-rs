@@ -30,6 +30,7 @@ feign = "0"
 reqwest = { version = "0.11", features = ["json"] }
 serde = "1.0"
 serde_derive = "1.0"
+serde_json = "1.0"
 # runtime
 tokio = { version = "1.15", features = ["macros", "rt-multi-thread"] }
 ```
