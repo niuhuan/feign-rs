@@ -210,3 +210,37 @@ Post => http://127.0.0.1:3000/user/new_user
 None
 Json(Object({"id": Number(123), "name": String("name")}))
 ```
+
+### Custom deserialize
+
+create async deserializer, result type same as field method
+```rust
+async fn bare_string(body: String) -> ClientResult<String> {
+    Ok(body)
+}
+```
+
+set deserialize, field method result type same as deserializer
+```rust
+    #[post(path = "/new_user", deserialize = "bare_string")]
+    async fn new_user_bare_string(&self, #[json] user: &User) -> ClientResult<String>;
+```
+
+```rust
+    match user_client
+        .new_user_bare_string(&User {
+            id: 123,
+            name: "name".to_owned(),
+        })
+        .await
+    {
+        Ok(result) => println!("result : {}", result),
+        Err(err) => panic!("{}", err),
+    };
+```
+
+result (Raw text)
+```text
+result : "name"
+```
+

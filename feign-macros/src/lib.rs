@@ -267,6 +267,14 @@ fn gen_method(
         },
     };
 
+    let deserialize = match request.deserialize {
+        None => quote! {serde_json::from_str(text.as_str())},
+        Some(deserialize) => {
+            let builder_token: proc_macro2::TokenStream = deserialize.parse().unwrap();
+            quote! {#builder_token(text).await}
+        }
+    };
+
     quote! {
         pub async fn #name(&self, #inputs) #output {
             let request_path = String::from(#req_path)#path_variables;
@@ -282,7 +290,7 @@ fn gen_method(
                 .error_for_status()?
                 .text()
                 .await?;
-            Ok(serde_json::from_str(text.as_str())?)
+            Ok(#deserialize?)
         }
     }
 }
@@ -344,4 +352,6 @@ struct ClientArgs {
 #[derive(Debug, FromMeta)]
 struct Request {
     pub path: String,
+    #[darling(default)]
+    pub deserialize: Option<String>,
 }

@@ -33,6 +33,10 @@ pub struct User {
     pub name: String,
 }
 
+async fn bare_string(body: String) -> ClientResult<String> {
+    Ok(body)
+}
+
 #[client(
     host = "http://127.0.0.1:3000",
     path = "/user",
@@ -44,6 +48,8 @@ pub trait UserClient {
     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
     #[post(path = "/new_user")]
     async fn new_user(&self, #[json] user: &User) -> ClientResult<Option<String>>;
+    #[post(path = "/new_user", deserialize = "bare_string")]
+    async fn new_user_bare_string(&self, #[json] user: &User) -> ClientResult<String>;
     #[get(path = "/headers")]
     async fn headers(
         &self,
@@ -75,6 +81,17 @@ async fn main() {
             Some(result) => println!("result : {}", result),
             None => println!("none"),
         },
+        Err(err) => panic!("{}", err),
+    };
+
+    match user_client
+        .new_user_bare_string(&User {
+            id: 123,
+            name: "name".to_owned(),
+        })
+        .await
+    {
+        Ok(result) => println!("result : {}", result),
         Err(err) => panic!("{}", err),
     };
 
