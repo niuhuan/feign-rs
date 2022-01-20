@@ -2,12 +2,11 @@ extern crate proc_macro;
 
 use crate::RequestBody::{Form, Json};
 use darling::FromMeta;
-use feign_common::*;
 use proc_macro::TokenStream;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
 use syn::spanned::Spanned;
-use syn::{parse_macro_input, FnArg, Pat};
+use syn::{parse_macro_input, FnArg};
 
 /// Make a restful http client
 ///
@@ -23,7 +22,7 @@ use syn::{parse_macro_input, FnArg, Pat};
 /// }
 /// ```
 ///
-#[proc_macro_error(proc_macro_hack)]
+#[proc_macro_error]
 #[proc_macro_attribute]
 pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as syn::AttributeArgs);
@@ -74,7 +73,8 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
                      host: String,
                      client_path: String,
                      request_path: String,
-                     body: RequestBody| {
+                     body: RequestBody,
+                     headers: Option<std::collections::HashMap<String, String>>| {
                         Box::pin(#builder_token(
                             request_builder,
                             http_method,
@@ -82,6 +82,7 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
                             client_path,
                             request_path,
                             body,
+                            headers,
                         ))
                     },
                 ))
@@ -110,6 +111,7 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
                         String,
                         String,
                         feign::RequestBody,
+                        Option<std::collections::HashMap<String, String>>,
                     ) -> std::pin::Pin<
                         Box<
                             dyn Future<
@@ -195,6 +197,7 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
     let mut path_variables = Vec::new();
     let mut querys = Vec::new();
     let mut body = None;
+    let mut headers = None;
 
     match inputs.first() {
         Some(FnArg::Receiver(_)) => {}
@@ -212,14 +215,18 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
             "query" => querys.push(&ty.pat),
             "json" => match body {
                 None => body = Some(Json(&ty.pat)),
-                _ => abort!(&method.sig.span(), "json or form only once"),
+                _ => abort!(&ty.span(), "json or form only once"),
             },
             "form" => match body {
                 None => body = Some(Form(&ty.pat)),
-                _ => abort!(&method.sig.span(), "json or form only once"),
+                _ => abort!(&ty.span(), "json or form only once"),
+            },
+            "headers" => match headers {
+                None => headers = Some(&ty.pat),
+                _ => abort!(&ty.span(), "json or form only once"),
             },
             other => abort!(
-                &method.sig.span(),
+                &ty.span(),
                 format!("not allowed param type : {}", other).as_str()
             ),
         });
@@ -267,6 +274,25 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
         },
     };
 
+    let header_mut: proc_macro2::TokenStream = match headers {
+        None => quote! {},
+        Some(_) => quote! {mut},
+    };
+
+    let headers_point = match headers {
+        None => quote! {None},
+        Some(headers) => quote! {Some(#headers)},
+    };
+
+    let headers = match headers {
+        None => quote! {},
+        Some(headers) => quote! {
+            for header in #headers.clone() {
+                req = req.header(header.0,header.1);
+            }
+        },
+    };
+
     let params = quote! {
         #query
         #req_body
@@ -291,20 +317,21 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
             let request_path = String::from(#req_path)#path_variables;
             let url = format!("{}{}{}", host, client_path, request_path);
             let client: reqwest::Client = (self.reqwest_client_builder)().await?;
+            let #header_mut req = client
+                        .#http_method_ident(url.as_str())
+                        #params;
+            #headers;
             let req = match Option::as_ref(&self.before_send_builder) {
                 Some(before_send_builder) => before_send_builder(
-                    client
-                        .#http_method_ident(url.as_str())
-                        #params,
+                    req,
                     #_http_method_token,
                     host,
                     client_path,
                     request_path,
                     #request_builder_body,
+                    #headers_point,
                 ).await?,
-                None => client
-                .#http_method_ident(url.as_str())
-                #params,
+                None => req,
             };
             Ok(req
                 .send()
@@ -314,6 +341,16 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
                 .await?)
         }
     }
+}
+
+/// Http methods enumed
+enum HttpMethod {
+    Get,
+    Post,
+    Put,
+    Patch,
+    Delete,
+    Head,
 }
 
 fn http_method_from_ident(ident: &syn::Ident) -> Option<HttpMethod> {
@@ -343,8 +380,8 @@ fn http_method_to_token(method: HttpMethod) -> proc_macro2::TokenStream {
 
 /// body types
 enum RequestBody<'a> {
-    Form(&'a Box<Pat>),
-    Json(&'a Box<Pat>),
+    Form(&'a Box<syn::Pat>),
+    Json(&'a Box<syn::Pat>),
 }
 
 /// Args of client

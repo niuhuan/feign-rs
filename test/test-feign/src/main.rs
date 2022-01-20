@@ -1,5 +1,6 @@
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
+use std::collections::HashMap;
 use std::future::Future;
 
 use feign::{client, ClientResult, HttpMethod, RequestBody};
@@ -15,12 +16,14 @@ async fn before_send(
     client_path: String,
     request_path: String,
     body: RequestBody,
+    headers: Option<HashMap<String, String>>,
 ) -> ClientResult<reqwest::RequestBuilder> {
     println!(
         "============= (Before_send)\n\
             {:?} => {}{}{}\n\
+            {:?}\n\
             {:?}",
-        http_method, host, client_path, request_path, body
+        http_method, host, client_path, request_path, headers, body
     );
     Ok(request_builder.header("a", "b"))
 }
@@ -42,6 +45,12 @@ pub trait UserClient {
     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
     #[post(path = "/new_user")]
     async fn new_user(&self, #[json] user: &User) -> ClientResult<Option<String>>;
+    #[get(path = "/headers")]
+    async fn headers(
+        &self,
+        #[json] age: &i64,
+        #[headers] headers: HashMap<String, String>,
+    ) -> ClientResult<Option<User>>;
 }
 
 #[tokio::main]
@@ -65,6 +74,17 @@ async fn main() {
     {
         Ok(option) => match option {
             Some(result) => println!("result : {}", result),
+            None => println!("none"),
+        },
+        Err(err) => panic!("{}", err),
+    };
+
+    let mut headers = HashMap::<String, String>::new();
+    headers.insert(String::from("C"), String::from("D"));
+
+    match user_client.headers(&12, headers).await {
+        Ok(option) => match option {
+            Some(user) => println!("user : {}", user.name),
             None => println!("none"),
         },
         Err(err) => panic!("{}", err),

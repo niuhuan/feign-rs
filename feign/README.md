@@ -110,6 +110,17 @@ result : name
 
 ## Options
 
+### Put headers
+
+```rust
+    #[get(path = "/headers")]
+    async fn headers(
+        &self,
+        #[json] age: &i64,
+        #[headers] headers: HashMap<String, String>,
+    ) -> ClientResult<Option<User>>;
+```
+
 ### Dynamic modify host with configure_host
 
 ```rust
@@ -152,20 +163,22 @@ If you want check hash of json body, sign to header. Or log the request.
 
 ```rust
 async fn before_send(
-    request_builder: reqwest::RequestBuilder,
-    http_method: HttpMethod,
-    host: String,
-    client_path: String,
-    request_path: String,
-    body: RequestBody,
+  request_builder: reqwest::RequestBuilder,
+  http_method: HttpMethod,
+  host: String,
+  client_path: String,
+  request_path: String,
+  body: RequestBody,
+  headers: Option<HashMap<String, String>>,
 ) -> ClientResult<reqwest::RequestBuilder> {
-    println!(
-        "============= (Before_send)\n\
+  println!(
+    "============= (Before_send)\n\
             {:?} => {}{}{}\n\
+            {:?}\n\
             {:?}",
-        http_method, host, client_path, request_path, body
-    );
-    Ok(request_builder.header("a", "b"))
+    http_method, host, client_path, request_path, headers, body
+  );
+  Ok(request_builder.header("a", "b"))
 }
 ```
 
@@ -185,12 +198,14 @@ pub trait UserClient {
     async fn new_user(&self, #[json] user: &User) -> ClientResult<Option<String>>;
 }
 ```
-
+Result
 ```text
 ============= (Before_send)
 Get => http://127.0.0.1:3000/user/find_by_id/12
 None
+None
 ============= (Before_send)
 Post => http://127.0.0.1:3000/user/new_user
+None
 Json(Object({"id": Number(123), "name": String("name")}))
 ```

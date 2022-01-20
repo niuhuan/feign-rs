@@ -8,7 +8,6 @@ license = "MIT"
 repository = "https://github.com/niuhuan/feign-rs"
 
 [dependencies]
-feign-common = { path = "../feign-common" }
 darling = "0"
 proc-macro-error = "1"
 proc-macro2 = "1"
