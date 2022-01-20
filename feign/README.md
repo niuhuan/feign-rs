@@ -27,7 +27,7 @@ curl -X POST 127.1:3000/user/new_user \
 
 ```toml
 [dependencies]
-feign = "1"
+feign = "0"
 reqwest = { version = "0.11", features = ["json"] }
 serde = "1.0"
 serde_derive = "1.0"
