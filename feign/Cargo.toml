@@ -1,6 +1,6 @@
 [package]
 name = "feign"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["niuhuan <niuhuancn@outlook.com>"]
 description = "Rest client of Rust"
@@ -8,6 +8,6 @@ license = "MIT"
 repository = "https://github.com/niuhuan/feign-rs"
 
 [dependencies]
-feign-macros = "0.1.1"
+feign-macros = "0.1.2"
 
 [lib]

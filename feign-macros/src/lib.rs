@@ -49,10 +49,29 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
         })
         .map(|m| gen_method(m));
 
+    let reqwest_client_builder = match args.client_builder {
+        Some(builder) => {
+            let builder_token: proc_macro2::TokenStream = builder.parse().unwrap();
+            quote! {
+                Box::new(|| Box::pin(#builder_token()))
+            }
+        }
+        None => quote! {
+            Box::new(|| Box::pin(async {
+                        Ok(reqwest::ClientBuilder::new().build()?)
+                    }))
+        },
+    };
+
     let tokens = quote! {
         #vis struct #name {
             host: tokio::sync::Mutex<String>,
             path: String,
+            reqwest_client_builder: Box<dyn Fn() -> std::pin::Pin<
+                Box<dyn Future<
+                    Output = Result<reqwest::Client, Box<dyn std::error::Error + Send + Sync>>
+                >>>
+            >,
         }
 
         impl #name {
@@ -61,6 +80,7 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
                 Self{
                     host: tokio::sync::Mutex::new(String::from(#base_host)),
                     path: String::from(#base_path),
+                    reqwest_client_builder: #reqwest_client_builder,
                 }
             }
 
@@ -203,8 +223,8 @@ fn gen_method(method: &syn::TraitItemMethod) -> proc_macro2::TokenStream {
         pub async fn #name(&self, #inputs) #output {
             let path = String::from(#req_path)#path_variables;
             let url = format!("{}{}", self.context().await, path);
-            Ok(reqwest::ClientBuilder::new()
-                .build()?
+            let client: reqwest::Client = (self.reqwest_client_builder)().await?;
+            Ok(client
                 .#http_method_ident(url.as_str())
                 #params
                 .send()
@@ -252,6 +272,8 @@ struct ClientArgs {
     #[darling(default)]
     pub host: Option<String>,
     pub path: String,
+    #[darling(default)]
+    pub client_builder: Option<String>,
 }
 
 /// Args of request

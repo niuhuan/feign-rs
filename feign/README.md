@@ -106,6 +106,8 @@ user : hello
 result : name
 ```
 
+## Options
+
 ### Dynamic modify host with configure_host
 
 ```rust
@@ -119,5 +121,25 @@ async fn main() {
     user_client
         .configure_host(String::from("http://127.0.0.1:3000"))
         .await;
+}
+```
+
+### Customer reqwest client builder
+
+Impl a async fn Result<reqwest::Client, Box<dyn std::error::Error + Sync + Send>>, put fn name to arg client_builder
+
+```rust
+use feign::{client, ClientResult};
+
+async fn client_builder() -> ClientResult<reqwest::Client> {
+    Ok(reqwest::ClientBuilder::new().build().unwrap())
+}
+
+#[client(
+    host = "http://127.0.0.1:3000",
+    path = "/user",
+    client_builder = "client_builder"
+)]
+pub trait UserClient {
 }
 ```
