@@ -64,10 +64,13 @@ use feign::{client, ClientResult};
 
 #[client(host = "http://127.0.0.1:3000", path = "/user")]
 pub trait UserClient {
+  
     #[get(path = "/find_by_id/<id>")]
     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
+
     #[post(path = "/new_user")]
     async fn new_user(&self, #[json] user: &User) -> ClientResult<Option<String>>;
+
 }
 ```
 
@@ -212,15 +215,22 @@ Json(Object({"id": Number(123), "name": String("name")}))
 
 ### Custom deserialize
 
-create async deserializer, result type same as field method
+create async deserializer, result type same as field method, or use generic type.
 ```rust
 async fn bare_string(body: String) -> ClientResult<String> {
     Ok(body)
+}
+
+async fn decode<T: for<'de> serde::Deserialize<'de>>(body: String) -> ClientResult<T> {
+  Ok(serde_json::from_str(body.as_str())?)
 }
 ```
 
 set deserialize, field method result type same as deserializer
 ```rust
+    #[get(path = "/find_by_id/<id>", deserialize = "decode")]
+    async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
+
     #[post(path = "/new_user", deserialize = "bare_string")]
     async fn new_user_bare_string(&self, #[json] user: &User) -> ClientResult<String>;
 ```

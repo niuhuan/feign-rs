@@ -37,6 +37,10 @@ async fn bare_string(body: String) -> ClientResult<String> {
     Ok(body)
 }
 
+async fn decode<T: for<'de> serde::Deserialize<'de>>(body: String) -> ClientResult<T> {
+    Ok(serde_json::from_str(body.as_str())?)
+}
+
 #[client(
     host = "http://127.0.0.1:3000",
     path = "/user",
@@ -44,7 +48,7 @@ async fn bare_string(body: String) -> ClientResult<String> {
     before_send = "before_send"
 )]
 pub trait UserClient {
-    #[get(path = "/find_by_id/<id>")]
+    #[get(path = "/find_by_id/<id>", deserialize = "decode")]
     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
     #[post(path = "/new_user")]
     async fn new_user(&self, #[json] user: &User) -> ClientResult<Option<String>>;
@@ -61,7 +65,7 @@ pub trait UserClient {
 #[tokio::main]
 async fn main() {
     let user_client: UserClient = UserClient::builder()
-        .set_host(String::from("http://127.0.0.1:3001"))
+        .set_host(String::from("http://127.0.0.1:3000"))
         .build();
 
     match user_client.find_by_id(12).await {

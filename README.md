@@ -31,10 +31,13 @@ pub struct User {
 
 #[client(host = "http://127.0.0.1:3000", path = "/user")]
 pub trait UserClient {
+    
     #[get(path = "/find_by_id/<id>")]
     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
+    
     #[post(path = "/new_user")]
     async fn new_user(&self, #[json] user: &User) -> ClientResult<Option<String>>;
+
 }
 ```
 
