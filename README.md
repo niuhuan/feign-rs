@@ -10,12 +10,9 @@
 Feign-RS (Rest client of Rust)
 </h1>
 
+### [Start to use](https://github.com/niuhuan/feign-rs/tree/master/guides)
 
 ## Examples
-
-quick make a restful http client
-
-[Start to use](feign)
 
 ```rust
 use serde_derive::Deserialize;
@@ -41,4 +38,13 @@ pub trait UserClient {
 }
 ```
 
+## Features
+
+- Easy to use
+- Asynchronous request
+- Configurable agent
+- Supports form, JSON
+- Reconfig host
+- Additional request processer
+- Custom deserializer
 
