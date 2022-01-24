@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "feign-macros",
+    "feign",
+    "test/test-feign",
+    "test/test-server",
+]
