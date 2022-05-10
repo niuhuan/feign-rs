@@ -1,7 +1,7 @@
+pub use anyhow::Result as ClientResult;
 pub use feign_macros::*;
 
-/// Result
-pub type ClientResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+pub mod re_exports;
 
 /// Http methods enumed
 #[derive(Debug)]

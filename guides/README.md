@@ -18,16 +18,13 @@ curl -X POST 127.1:3000/user/new_user \
 ### Dependencies
 
 - Add feign dependency to **Cargo.toml**
-- Add reqwest dependency to **Cargo.toml** and enable feature **json**
 - Add serde's dependencies to **Cargo.toml**, because inputs or outputs entities must be **Serialize / Deserialize**
 
 ```toml
 [dependencies]
 feign = "0"
-reqwest = { version = "0.11", features = ["json"] }
 serde = "1.0"
 serde_derive = "1.0"
-serde_json = "1.0"
 # runtime
 tokio = { version = "1.15", features = ["macros", "rt-multi-thread"] }
 ```
@@ -138,6 +135,16 @@ async fn main() {
 
 ### Customer reqwest client builder
 
+Add reqwest to dependencies and enable json feature, or use feign re_exports reqwest.
+
+```toml
+reqwest = { version = "0", features = ["json"] }
+```
+or
+```rust
+use feign::re_exports::reqwest;
+```
+
 Impl a async fn Result<reqwest::Client, Box<dyn std::error::Error + Sync + Send>>, put fn name to arg client_builder
 
 ```rust
@@ -211,6 +218,12 @@ Json(Object({"id": Number(123), "name": String("name")}))
 ```
 
 ### Custom deserialize
+
+Add serde_json to Cargo.toml
+
+```toml
+serde_json = "1"
+```
 
 create async deserializer, result type same as field method, or use generic type.
 ```rust

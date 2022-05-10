@@ -2,6 +2,7 @@ use serde_derive::Deserialize;
 use serde_derive::Serialize;
 use std::collections::HashMap;
 
+use feign::re_exports::{reqwest, serde_json};
 use feign::{client, ClientResult, HttpMethod, RequestBody};
 
 async fn client_builder() -> ClientResult<reqwest::Client> {

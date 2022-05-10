@@ -40,7 +40,7 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
         None => quote! {
-            reqwest::ClientBuilder::new().build()?
+            ::feign::re_exports::reqwest::ClientBuilder::new().build()?
         },
     };
 
@@ -241,10 +241,10 @@ fn gen_method(
             feign::RequestBody::None
         },
         Some(Form(form)) => quote! {
-            feign::RequestBody::Json(serde_json::to_value(#form)?)
+            feign::RequestBody::Json(::feign::re_exports::serde_json::to_value(#form)?)
         },
         Some(Json(json)) => quote! {
-            feign::RequestBody::Json(serde_json::to_value(#json)?)
+            feign::RequestBody::Json(::feign::re_exports::serde_json::to_value(#json)?)
         },
     };
 
@@ -305,7 +305,7 @@ fn gen_method(
     };
 
     let deserialize = match request.deserialize {
-        None => quote! {serde_json::from_str(text.as_str())},
+        None => quote! {::feign::re_exports::serde_json::from_str(text.as_str())},
         Some(deserialize) => {
             let builder_token: proc_macro2::TokenStream = deserialize.parse().unwrap();
             quote! {#builder_token(text).await}
