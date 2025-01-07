@@ -8,11 +8,11 @@ license = "MIT"
 repository = "https://github.com/niuhuan/feign-rs"
 
 [dependencies]
-darling = "0"
-proc-macro-error = "1"
-proc-macro2 = "1"
-quote = "1"
-syn = "1"
+darling = "0.20.10"
+proc-macro-error = "1.0.4"
+proc-macro2 = "1.0.92"
+quote = "1.0.38"
+syn = { version = "2.0.95", features = ["full"] }
 
 [lib]
 proc-macro = true
