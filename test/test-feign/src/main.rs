@@ -43,7 +43,7 @@ async fn decode<T: for<'de> serde::Deserialize<'de>>(body: String) -> ClientResu
 }
 
 #[client(
-    host = "http://127.0.0.1:3000",
+    host = "http://127.0.0.1:3030",
     path = "/user",
     client_builder = "client_builder",
     before_send = "before_send"
@@ -66,7 +66,7 @@ pub trait UserClient {
 #[tokio::main]
 async fn main() {
     let user_client: UserClient = UserClient::builder()
-        .set_host(String::from("http://127.0.0.1:3000"))
+        .set_host(String::from("http://127.0.0.1:3030"))
         .build();
 
     match user_client.find_by_id(12).await {
@@ -74,7 +74,7 @@ async fn main() {
             Some(user) => println!("user : {}", user.name),
             None => println!("none"),
         },
-        Err(err) => panic!("{}", err),
+        Err(err) => eprintln!("{}", err),
     };
 
     match user_client
@@ -88,7 +88,7 @@ async fn main() {
             Some(result) => println!("result : {}", result),
             None => println!("none"),
         },
-        Err(err) => panic!("{}", err),
+        Err(err) => eprintln!("{}", err),
     };
 
     match user_client
@@ -99,7 +99,7 @@ async fn main() {
         .await
     {
         Ok(result) => println!("result : {}", result),
-        Err(err) => panic!("{}", err),
+        Err(err) => eprintln!("{}", err),
     };
 
     let mut headers = HashMap::<String, String>::new();
@@ -110,6 +110,6 @@ async fn main() {
             Some(user) => println!("user : {}", user.name),
             None => println!("none"),
         },
-        Err(err) => panic!("{}", err),
+        Err(err) => eprintln!("{}", err),
     };
 }

@@ -1,12 +1,13 @@
 extern crate proc_macro;
 
 use crate::RequestBody::{Form, Json};
-use darling::FromMeta;
+use darling::ast::NestedMeta;
+use darling::{Error, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
 use syn::spanned::Spanned;
-use syn::{parse_macro_input, FnArg, TraitItemMethod};
+use syn::{parse_macro_input, FnArg, TraitItemFn};
 
 /// Make a restful http client
 ///
@@ -25,7 +26,12 @@ use syn::{parse_macro_input, FnArg, TraitItemMethod};
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as syn::AttributeArgs);
+    let args = match NestedMeta::parse_meta_list(args.into()) {
+        Ok(v) => v,
+        Err(e) => {
+            return TokenStream::from(Error::from(e).write_errors());
+        }
+    };
     let input = parse_macro_input!(input as syn::ItemTrait);
     let args: ClientArgs = match ClientArgs::from_list(&args) {
         Ok(v) => v,
@@ -56,7 +62,7 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
         .items
         .iter()
         .filter_map(|item| match item {
-            syn::TraitItem::Method(m) => Some(m),
+            syn::TraitItem::Fn(m) => Some(m),
             _ => None,
         })
         .map(|m| gen_method(m, args.before_send.as_ref(), &reqwest_client_builder));
@@ -125,7 +131,7 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Gen feign methods
 fn gen_method(
-    method: &TraitItemMethod,
+    method: &TraitItemFn,
     before_send: Option<&String>,
     reqwest_client_builder: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
@@ -140,7 +146,7 @@ fn gen_method(
     let inputs = &method.sig.inputs;
     let output = &method.sig.output;
     let attr = method.attrs.iter().next();
-    let http_method_ident = match attr.map(|a| a.path.get_ident()).flatten() {
+    let http_method_ident = match attr.map(|a| a.path().get_ident()).flatten() {
         Some(ident) => ident,
         None => {
             abort!(&method.span(), "Expects an http method")
@@ -158,10 +164,7 @@ fn gen_method(
 
     let _http_method_token = http_method_to_token(_http_method);
 
-    let request: Request = match Request::from_meta(&match attr.unwrap().parse_meta() {
-        Ok(a) => a,
-        Err(err) => return err.into_compile_error(),
-    }) {
+    let request: Request = match Request::from_meta(&attr.unwrap().meta) {
         Ok(v) => v,
         Err(err) => return TokenStream::from(err.write_errors()).into(),
     };
@@ -182,7 +185,7 @@ fn gen_method(
         .iter()
         .filter_map(|fn_arg| match fn_arg {
             FnArg::Receiver(_) => None,
-            FnArg::Typed(ty) => Some((ty, &ty.attrs.first()?.path.segments.first()?.ident)),
+            FnArg::Typed(ty) => Some((ty, &ty.attrs.first()?.path().segments.first()?.ident)),
         })
         .for_each(|(ty, p)| match &*p.to_string() {
             "path" => path_variables.push(&ty.pat),
