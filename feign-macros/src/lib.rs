@@ -72,9 +72,9 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let tokens = quote! {
 
-        #[derive(Debug, Clone)]
+        #[derive(Debug)]
         #vis struct #name {
-            host: String,
+            host: Box<dyn feign::Host>,
             path: String,
         }
 
@@ -82,15 +82,15 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
 
             pub fn new() -> Self {
                 Self{
-                    host: String::from(#base_host),
+                    host: Box::new(String::from(#base_host)),
                     path: String::from(#base_path),
                 }
             }
 
-            pub fn new_with_builder(host: String) -> Self {
+            pub fn new_with_builder(host: Box<dyn feign::Host>) -> Self {
                 Self{
-                    host: host,
-                    path: String::from(#base_path),
+                    host,
+                    path: String::from(#base_path).into(),
                 }
             }
 
@@ -102,23 +102,23 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         #vis struct #builder_name {
-            host: String,
+            host: Box<dyn feign::Host>,
         }
 
         impl #builder_name {
 
             pub fn new() -> Self {
                 Self{
-                    host: String::from(#base_host),
+                    host: Box::new(String::from(#base_host)),
                 }
             }
 
-            pub fn build(&self) -> #name {
-                #name::new_with_builder(self.host.clone())
+            pub fn build(self) -> #name {
+                #name::new_with_builder(self.host)
             }
 
-            pub fn set_host(mut self, host: String) -> Self {
-                self.host = host;
+            pub fn set_host(mut self, host: impl ::feign::Host) -> Self {
+                self.host = Box::new(host);
                 self
             }
 
@@ -294,7 +294,7 @@ fn gen_method(
                 #builder_token(
                             req,
                             #_http_method_token,
-                            self.host.clone(),
+                            self.host.host().to_string(),
                             self.path.clone(),
                             request_path.clone(),
                             #request_builder_body,
