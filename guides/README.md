@@ -133,6 +133,16 @@ async fn main() {
 }
 ```
 
+##### load balance
+
+implement `feign::Host` trait, or use `feign::HostRound`
+
+```rust
+let user_client: UserClient = UserClient::builder()
+    .set_host(feign::HostRound::new(vec!["http://127.0.0.1:3031".to_string(), "http://127.0.0.1:3032".to_string()]).unwrap())
+    .build();
+```
+
 ### Customer reqwest client builder
 
 Add reqwest to dependencies and enable json feature, or use feign re_exports reqwest.
