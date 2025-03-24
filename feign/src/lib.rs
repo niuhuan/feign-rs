@@ -1,5 +1,6 @@
 pub use anyhow::Result as ClientResult;
 pub use feign_macros::*;
+
 use std::fmt::{Debug, Display, Formatter};
 
 pub mod re_exports;

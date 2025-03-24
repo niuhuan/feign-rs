@@ -74,7 +74,7 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[derive(Debug)]
         #vis struct #name {
-            host: Box<dyn feign::Host>,
+            host: std::sync::Arc<dyn feign::Host>,
             path: String,
         }
 
@@ -82,12 +82,12 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
 
             pub fn new() -> Self {
                 Self{
-                    host: Box::new(String::from(#base_host)),
+                    host: std::sync::Arc::new(String::from(#base_host)),
                     path: String::from(#base_path),
                 }
             }
 
-            pub fn new_with_builder(host: Box<dyn feign::Host>) -> Self {
+            pub fn new_with_builder(host: std::sync::Arc<dyn feign::Host>) -> Self {
                 Self{
                     host,
                     path: String::from(#base_path).into(),
@@ -102,14 +102,14 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         #vis struct #builder_name {
-            host: Box<dyn feign::Host>,
+            host: std::sync::Arc<dyn feign::Host>,
         }
 
         impl #builder_name {
 
             pub fn new() -> Self {
                 Self{
-                    host: Box::new(String::from(#base_host)),
+                    host: std::sync::Arc::new(String::from(#base_host)),
                 }
             }
 
@@ -118,7 +118,12 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             pub fn set_host(mut self, host: impl ::feign::Host) -> Self {
-                self.host = Box::new(host);
+                self.host = std::sync::Arc::new(host);
+                self
+            }
+
+            pub fn set_host_arc(mut self, host: std::sync::Arc<dyn ::feign::Host>) -> Self {
+                self.host = host;
                 self
             }
 

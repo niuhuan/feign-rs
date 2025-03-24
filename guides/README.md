@@ -133,6 +133,18 @@ async fn main() {
 }
 ```
 
+```rust
+#[client(path = "/user")]
+pub trait UserClient {}
+
+#[tokio::main]
+async fn main() {
+  let user_client: UserClient = UserClient::builder()
+          .set_host_arc(Arc::new(String::from("http://127.0.0.1:3001")))
+          .build();
+}
+```
+
 ##### load balance
 
 implement `feign::Host` trait, or use `feign::HostRound`

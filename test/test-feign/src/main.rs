@@ -1,7 +1,7 @@
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 use std::collections::HashMap;
-
+use std::sync::Arc;
 use feign::re_exports::{reqwest, serde_json};
 use feign::{client, ClientResult, HttpMethod, RequestBody};
 
@@ -66,7 +66,7 @@ pub trait UserClient {
 #[tokio::main]
 async fn main() {
     let user_client: UserClient = UserClient::builder()
-        .set_host(String::from("http://127.0.0.1:3030"))
+        .set_host_arc(Arc::new(String::from("http://127.0.0.1:3030")))
         .build();
 
     match user_client.find_by_id(12).await {
