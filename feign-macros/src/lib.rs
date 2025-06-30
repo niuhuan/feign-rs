@@ -249,7 +249,7 @@ fn gen_method(
             feign::RequestBody::None
         },
         Some(Form(form)) => quote! {
-            feign::RequestBody::Json(::feign::re_exports::serde_json::to_value(#form)?)
+            feign::RequestBody::Form(::feign::re_exports::serde_json::to_value(#form)?)
         },
         Some(Json(json)) => quote! {
             feign::RequestBody::Json(::feign::re_exports::serde_json::to_value(#json)?)
