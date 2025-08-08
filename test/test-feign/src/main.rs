@@ -1,9 +1,9 @@
+use feign::re_exports::{reqwest, serde_json};
+use feign::{client, Args, ClientResult, HttpMethod, RequestBody};
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use feign::re_exports::{reqwest, serde_json};
-use feign::{client, ClientResult, HttpMethod, RequestBody};
 
 async fn client_builder() -> ClientResult<reqwest::Client> {
     Ok(reqwest::ClientBuilder::new().build().unwrap())
@@ -34,6 +34,18 @@ pub struct User {
     pub name: String,
 }
 
+#[derive(Args)]
+pub struct PutUserArgs {
+    #[arg_path]
+    pub id: i64,
+    #[arg_query]
+    pub q: String,
+    #[arg_json]
+    pub data: User,
+    #[arg_headers]
+    pub headers: HashMap<String, String>,
+}
+
 async fn bare_string(body: String) -> ClientResult<String> {
     Ok(body)
 }
@@ -61,6 +73,8 @@ pub trait UserClient {
         #[json] age: &i64,
         #[headers] headers: HashMap<String, String>,
     ) -> ClientResult<Option<User>>;
+    #[put(path = "/put_user/<id>")]
+    async fn put_user(&self, #[args] args: PutUserArgs) -> ClientResult<User>;
 }
 
 #[tokio::main]
@@ -105,11 +119,27 @@ async fn main() {
     let mut headers = HashMap::<String, String>::new();
     headers.insert(String::from("C"), String::from("D"));
 
-    match user_client.headers(&12, headers).await {
+    match user_client.headers(&12, headers.clone()).await {
         Ok(option) => match option {
             Some(user) => println!("user : {}", user.name),
             None => println!("none"),
         },
+        Err(err) => eprintln!("{}", err),
+    };
+
+    match user_client
+        .put_user(PutUserArgs {
+            id: 123,
+            q: "q".to_owned(),
+            data: User {
+                id: 456,
+                name: "name".to_owned(),
+            },
+            headers: headers,
+        })
+        .await
+    {
+        Ok(user) => println!("result : {:?}", user),
         Err(err) => eprintln!("{}", err),
     };
 }

@@ -11,9 +11,9 @@ use syn::{parse_macro_input, FnArg, TraitItemFn};
 
 /// Make a restful http client
 ///
-/// # Examlples
+/// # Examples
 ///
-/// ```
+/// ```ignore
 /// #[client(host = "http://127.0.0.1:3000", path = "/user")]
 /// pub trait UserClient {
 ///     #[get(path = "/find_by_id/<id>")]
@@ -180,6 +180,7 @@ fn gen_method(
     let mut querys = Vec::new();
     let mut body = None;
     let mut headers = None;
+    let mut args = None;
 
     match inputs.first() {
         Some(FnArg::Receiver(_)) => {}
@@ -205,7 +206,11 @@ fn gen_method(
             },
             "headers" => match headers {
                 None => headers = Some(&ty.pat),
-                _ => abort!(&ty.span(), "json or form only once"),
+                _ => abort!(&ty.span(), "headers only once"),
+            },
+            "args" => match args {
+                None => args = Some(&ty.pat),
+                _ => abort!(&ty.span(), "args only once"),
             },
             other => abort!(
                 &ty.span(),
@@ -226,58 +231,127 @@ fn gen_method(
         stream
     };
 
-    let query = if querys.is_empty() {
+    let mut query = if querys.is_empty() {
         quote! {}
     } else {
         quote! {
-            .query(&[#(#querys),*])
+            req = req.query(&[#(#querys),*]);
         }
     };
 
-    let req_body = match body {
-        None => quote! {},
-        Some(Form(form)) => quote! {
-            .form(#form)
-        },
-        Some(Json(json)) => quote! {
-            .json(#json)
-        },
+    let has_before_send = before_send.is_some();
+
+    let mut req_body = if has_before_send {
+        match body {
+            None => quote! {
+                let req_body = feign::RequestBody::None;
+            },
+            Some(Form(form)) => quote! {
+                let req_body = feign::RequestBody::Form(::feign::re_exports::serde_json::to_value(#form)?);
+                req = req.form(#form);
+            },
+            Some(Json(json)) => quote! {
+                let req_body = feign::RequestBody::Json(::feign::re_exports::serde_json::to_value(#json)?);
+                req = req.json(#json);
+            },
+        }
+    } else {
+        match body {
+            None => quote! {},
+            Some(Form(form)) => quote! {
+                req = req.form(#form);
+            },
+            Some(Json(json)) => quote! {
+                req = req.json(#json);
+            },
+        }
     };
 
-    let request_builder_body = match body {
-        None => quote! {
-            feign::RequestBody::None
-        },
-        Some(Form(form)) => quote! {
-            feign::RequestBody::Form(::feign::re_exports::serde_json::to_value(#form)?)
-        },
-        Some(Json(json)) => quote! {
-            feign::RequestBody::Json(::feign::re_exports::serde_json::to_value(#json)?)
-        },
+    let mut headers = if has_before_send {
+        match headers {
+            None => quote! {
+                let mut headers_opt = None;
+            },
+            Some(headers) => quote! {
+                let mut headers_opt = Some(#headers.clone());
+                for header in #headers {
+                    req = req.header(header.0, header.1);
+                }
+            },
+        }
+    } else {
+        match headers {
+            None => quote! {},
+            Some(headers) => quote! {
+                    for header in #headers {
+                        req = req.header(header.0,header.1);
+                    }
+            },
+        }
     };
 
-    let header_mut: proc_macro2::TokenStream = match headers {
-        None => quote! {},
-        Some(_) => quote! {mut},
-    };
-
-    let headers_point = match headers {
-        None => quote! {None},
-        Some(headers) => quote! {Some(#headers)},
-    };
-
-    let headers = match headers {
-        None => quote! {},
-        Some(headers) => quote! {
-            for header in #headers.clone() {
-                req = req.header(header.0,header.1);
+    let mut args_path = quote! {};
+    if let Some(args) = args {
+        args_path = quote! {
+            for path in #args.path() {
+                request_path = request_path.replace(path.0, path.1.as_str());
             }
-        },
-    };
-
-    let params = quote! {
-        #query
-        #req_body
+        };
+        query = quote! {
+            if let Some(query) = #args.query() {
+                req = req.query(&query);
+            }
+        };
+        if body.is_some() {
+            req_body = quote! {
+                match #args.body()? {
+                    feign::RequestBody::None => {},
+                    _ => {
+                        return Err(feign::re_exports::anyhow::anyhow!("json or form can only once"));
+                    },
+                }
+            };
+        } else {
+            req_body = quote! {
+                let req_body = #args.body()?;
+                match &req_body {
+                    feign::RequestBody::None => {},
+                    feign::RequestBody::Form(form) => {
+                        req = req.form(form);
+                    },
+                    feign::RequestBody::Json(json) => {
+                        req = req.json(json);
+                    },
+                }
+            };
+        }
+        headers = if has_before_send {
+            quote! {
+                    #headers
+                    if let Some(hs) = #args.headers() {
+                        match &mut headers_opt {
+                            None => {
+                                headers_opt = Some(hs.clone());
+                                for header in hs {
+                                    req = req.header(header.0, header.1);
+                                }
+                            },
+                            Some(headers) => {
+                                return Err(feign::re_exports::anyhow::anyhow!("headers can only once"));
+                            }
+                        }
+                    }
+            }
+        } else {
+            quote! {
+                #headers
+                if let Some(hs) = #args.headers() {
+                    for header in hs {
+                        req = req.header(header.0, header.1);
+                    }
+                }
+            }
+        };
     };
 
     let inputs = inputs
@@ -296,20 +370,18 @@ fn gen_method(
         Some(builder) => {
             let builder_token: proc_macro2::TokenStream = builder.clone().parse().unwrap();
             quote! {
-                #builder_token(
+                let req = #builder_token(
                             req,
                             #_http_method_token,
                             self.host.host().to_string(),
                             self.path.clone(),
                             request_path.clone(),
-                            #request_builder_body,
-                            #headers_point,
-                        ).await?
+                            req_body,
+                            headers_opt,
+                        ).await?;
             }
         }
-        None => quote! {
-            req
-        },
+        None => quote! {},
     };
 
     let deserialize = match request.deserialize {
@@ -322,13 +394,15 @@ fn gen_method(
 
     quote! {
         pub async fn #name(&self, #inputs) #output {
-            let request_path = String::from(#req_path)#path_variables;
+            let mut request_path = String::from(#req_path)#path_variables;
+            #args_path
             let url = format!("{}{}{}", self.host, self.path, request_path);
-            let #header_mut req = #reqwest_client_builder
-                        .#http_method_ident(url.as_str())
-                        #params;
-            #headers;
-            let req = #before_send_builder;
+            let mut req = #reqwest_client_builder
+                        .#http_method_ident(url.as_str());
+            #query
+            #req_body
+            #headers
+            #before_send_builder
             let text = req
                 .send()
                 .await?
@@ -399,4 +473,173 @@ struct Request {
     pub path: String,
     #[darling(default)]
     pub deserialize: Option<String>,
+}
+
+/// Derive macro for the `Args` trait
+///
+/// This macro automatically implements the `Args` trait for a struct,
+/// providing implementations for `request_path` and `request_builder` methods
+/// based on field attributes like `#[path]`, `#[query]`, `#[json]`, `#[form]`, `#[headers]`.
+///
+/// # Examples
+///
+/// ```ignore
+/// use feign::Args;
+///
+/// #[derive(Args)]
+/// struct MyArgs {
+///     #[path]
+///     pub id: i64,
+///     #[query]
+///     pub name: String,
+///     #[json]
+///     pub data: UserData,
+///     #[headers]
+///     pub auth: String,
+/// }
+/// ```
+#[proc_macro_error]
+#[proc_macro_derive(Args, attributes(arg_path, arg_query, arg_json, arg_form, arg_headers))]
+pub fn derive_args(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as syn::DeriveInput);
+    let name = &input.ident;
+
+    let fields = match &input.data {
+        syn::Data::Struct(data) => &data.fields,
+        _ => abort!(
+            &input.ident.span(),
+            "Args derive macro only supports structs"
+        ),
+    };
+
+    let mut path_fields: Vec<(&syn::Ident, &syn::Type)> = Vec::new();
+    let mut query_fields: Vec<(&syn::Ident, &syn::Type)> = Vec::new();
+    let mut json_field: Option<(&syn::Ident, &syn::Type)> = None;
+    let mut form_field: Option<(&syn::Ident, &syn::Type)> = None;
+    let mut headers_field: Option<(&syn::Ident, &syn::Type)> = None;
+
+    for field in fields.iter() {
+        let field_name = field.ident.as_ref().unwrap();
+        let field_type = &field.ty;
+
+        let mut has_path = false;
+        let mut has_query = false;
+        let mut has_json = false;
+        let mut has_form = false;
+        let mut has_headers = false;
+
+        for attr in &field.attrs {
+            if let syn::Meta::Path(path) = &attr.meta {
+                if let Some(ident) = path.get_ident() {
+                    match ident.to_string().as_str() {
+                        "arg_path" => has_path = true,
+                        "arg_query" => has_query = true,
+                        "arg_json" => has_json = true,
+                        "arg_form" => has_form = true,
+                        "arg_headers" => has_headers = true,
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        if has_path {
+            path_fields.push((field_name, field_type));
+        } else if has_query {
+            query_fields.push((field_name, field_type));
+        } else if has_json {
+            match json_field {
+                None => json_field = Some((field_name, field_type)),
+                _ => abort!(&field.span(), "json only once"),
+            }
+        } else if has_form {
+            match form_field {
+                None => form_field = Some((field_name, field_type)),
+                _ => abort!(&field.span(), "form only once"),
+            }
+        } else if has_headers {
+            match headers_field {
+                None => headers_field = Some((field_name, field_type)),
+                _ => abort!(&field.span(), "headers only once"),
+            }
+        }
+    }
+
+    if json_field.is_some() && form_field.is_some() {
+        abort!(&fields.span(), "json or form only once");
+    }
+
+    // Generate request_path method
+    let path = if path_fields.is_empty() {
+        quote! {}
+    } else {
+        let path_pairs: Vec<_> = path_fields
+            .iter()
+            .map(|(field_name, _)| {
+                let id = format!("<{}>", field_name);
+                quote! {
+                    (#id, format!("{}", self.#field_name))
+                }
+            })
+            .collect();
+        quote! {
+            vec![#(#path_pairs),*]
+        }
+    };
+
+    // Generate request_builder method
+    let query = if query_fields.is_empty() {
+        quote! {None}
+    } else {
+        let query_pairs: Vec<_> = query_fields
+            .iter()
+            .map(|(field_name, _)| {
+                quote! {
+                    (stringify!(#field_name), format!("{}", self.#field_name))
+                }
+            })
+            .collect();
+        quote! {
+            Some(vec![#(#query_pairs),*])
+        }
+    };
+
+    let body = match (form_field, json_field) {
+        (Some((field_name, _)), None) => quote! {
+            feign::RequestBody::Form(::feign::re_exports::serde_json::to_value(&self.#field_name)?)
+        },
+        (None, Some((field_name, _))) => quote! {
+            feign::RequestBody::Json(::feign::re_exports::serde_json::to_value(&self.#field_name)?)
+        },
+        _ => quote! {feign::RequestBody::None},
+    };
+
+    let headers = match headers_field {
+        None => quote! {},
+        Some((field_name, _)) => quote! {
+            Some(&self.#field_name)
+        },
+    };
+
+    let expanded = quote! {
+        impl #name {
+            fn path(&self) -> Vec<(&'static str, String)> {
+                #path
+            }
+
+            fn query(&self) -> Option<Vec<(&'static str, String)>> {
+                #query
+            }
+
+            fn body(&self) -> feign::ClientResult<feign::RequestBody> {
+                Ok(#body)
+            }
+
+            fn headers(&self) -> Option<&::std::collections::HashMap<String, String>> {
+                #headers
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
 }

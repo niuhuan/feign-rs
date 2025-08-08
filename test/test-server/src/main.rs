@@ -24,7 +24,15 @@ async fn main() {
         .and(warp::body::json())
         .map(move |user: User| serde_json::to_string(&user.name).unwrap());
 
-    warp::serve(find_by_id.or(new_user))
+    let put_user = warp::put()
+        .and(warp::path!("user" / "put_user" / i64))
+        .and(warp::body::json())
+        .map(move |id: i64, mut user: User| {
+            user.id = id;
+            serde_json::to_string(&user).unwrap()
+        });
+
+    warp::serve(find_by_id.or(new_user).or(put_user))
         .run(([127, 0, 0, 1], 3030))
         .await;
 }
