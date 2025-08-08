@@ -499,7 +499,10 @@ struct Request {
 /// }
 /// ```
 #[proc_macro_error]
-#[proc_macro_derive(Args, attributes(arg_path, arg_query, arg_json, arg_form, arg_headers))]
+#[proc_macro_derive(
+    Args,
+    attributes(feigen_path, feigen_query, feigen_json, feigen_form, feigen_headers)
+)]
 pub fn derive_args(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
     let name = &input.ident;
@@ -532,11 +535,11 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
             if let syn::Meta::Path(path) = &attr.meta {
                 if let Some(ident) = path.get_ident() {
                     match ident.to_string().as_str() {
-                        "arg_path" => has_path = true,
-                        "arg_query" => has_query = true,
-                        "arg_json" => has_json = true,
-                        "arg_form" => has_form = true,
-                        "arg_headers" => has_headers = true,
+                        "feigen_path" => has_path = true,
+                        "feigen_query" => has_query = true,
+                        "feigen_json" => has_json = true,
+                        "feigen_form" => has_form = true,
+                        "feigen_headers" => has_headers = true,
                         _ => {}
                     }
                 }
