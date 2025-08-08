@@ -618,7 +618,7 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
     };
 
     let headers = match headers_field {
-        None => quote! {},
+        None => quote! {None},
         Some((field_name, _)) => quote! {
             Some(&self.#field_name)
         },
