@@ -1,6 +1,6 @@
 [package]
 name = "feign"
-version = "0.1.11"
+version.workspace = true
 edition = "2021"
 authors = ["niuhuan <niuhuancn@outlook.com>"]
 description = "Rest client of Rust"

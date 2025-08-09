@@ -1,3 +1,4 @@
 [workspace]
+package.version = "0.2.2"
 resolver = "2"
 members = ["feign-macros", "feign", "test/test-feign", "test/test-server"]
