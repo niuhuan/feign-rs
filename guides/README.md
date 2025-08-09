@@ -242,7 +242,7 @@ pub trait UserClient {
 }
 ```
 
-Optionally set the State:
+Optionally set the `State`:
 
 ```rust
  let user_client = UserClient::builder()
