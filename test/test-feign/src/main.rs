@@ -5,28 +5,33 @@ use serde_derive::Serialize;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 async fn client_builder() -> ClientResult<reqwest::Client> {
     Ok(reqwest::ClientBuilder::new().build().unwrap())
 }
 
-async fn before_send<T: Debug>(
+async fn before_send<Body: Debug>(
     mut request_builder: reqwest::RequestBuilder,
-    body: RequestBody<T>,
+    body: RequestBody<Body>,
+    state: &Arc<RwLock<i32>>,
 ) -> ClientResult<reqwest::RequestBuilder> {
+    *state.write().await += 1;
+
     let (client, request) = request_builder.build_split();
     match request {
         Ok(request) => {
             println!(
                 "============= (Before_send)\n\
-                    {:?} => {}{}\n\
+                    {:?} => {}\n\
+                    {:?}\n\
                     {:?}\n\
                     {:?}",
                 request.method(),
-                request.url().host_str().unwrap_or_default(),
-                request.url().path(),
+                request.url().as_str(),
                 request.headers(),
-                body
+                body,
+                state,
             );
             request_builder = reqwest::RequestBuilder::from_parts(client, request);
             Ok(request_builder.header("a", "b"))
@@ -43,13 +48,13 @@ pub struct User {
 
 #[derive(Args)]
 pub struct PutUserArgs {
-    #[feigen_path]
+    #[feign_path]
     pub id: i64,
-    #[feigen_query]
+    #[feign_query]
     pub q: String,
-    #[feigen_json]
+    #[feign_json]
     pub data: User,
-    #[feigen_headers]
+    #[feign_headers]
     pub headers: HashMap<String, String>,
 }
 
@@ -86,8 +91,9 @@ pub trait UserClient {
 
 #[tokio::main]
 async fn main() {
-    let user_client: UserClient = UserClient::builder()
-        .set_host_arc(Arc::new(String::from("http://127.0.0.1:3030")))
+    let user_client = UserClient::builder()
+        .with_host_arc(Arc::new(String::from("http://127.0.0.1:3030")))
+        .with_state(Arc::new(RwLock::new(0)))
         .build();
 
     match user_client.find_by_id(12).await {

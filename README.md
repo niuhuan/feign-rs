@@ -26,13 +26,13 @@ pub struct User {
 
 #[derive(Args)]
 pub struct PutUserArgs {
-    #[feigen_path]
+    #[feign_path]
     pub id: i64,
-    #[feigen_query]
+    #[feign_query]
     pub q: String,
-    #[feigen_json]
+    #[feign_json]
     pub data: User,
-    #[feigen_headers]
+    #[feign_headers]
     pub headers: HashMap<String, String>,
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "feign-macros"
-version = "0.2.1"
+version.workspace = true
 edition = "2021"
 authors = ["niuhuan <niuhuancn@outlook.com>"]
 description = "Rest client of Rust"
