@@ -78,7 +78,7 @@ impl Host for HostRound {
 }
 
 #[derive(Debug)]
-pub struct State<S> {
+pub struct State<S = ()> {
     value: Box<dyn Any + Send + Sync + 'static>,
     marker: std::marker::PhantomData<S>,
 }
