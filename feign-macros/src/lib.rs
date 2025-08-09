@@ -70,62 +70,61 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
     let tokens = quote! {
 
         #[derive(Debug)]
-        #vis struct #name {
+        #vis struct #name<T=()> {
             host: std::sync::Arc<dyn feign::Host>,
             path: String,
+            state: feign::State<T>,
         }
 
-        impl #name {
-
-            pub fn new() -> Self {
-                Self{
+        impl #name<()> {
+            pub fn new() -> #name<()> {
+                #name::<()>{
                     host: std::sync::Arc::new(String::from(#base_host)),
                     path: String::from(#base_path),
+                    state: feign::State::new(()),
                 }
             }
 
-            pub fn new_with_builder(host: std::sync::Arc<dyn feign::Host>) -> Self {
-                Self{
-                    host,
-                    path: String::from(#base_path).into(),
-                }
+            pub fn builder() -> #builder_name<()> {
+                #builder_name::<()>::new()
             }
+        }
 
-            pub fn builder() -> #builder_name {
-                #builder_name::new()
-            }
-
+        impl<T> #name<T> where T: std::any::Any + core::marker::Send + core::marker::Sync + 'static{
             #(#methods)*
         }
 
-        #vis struct #builder_name {
-            host: std::sync::Arc<dyn feign::Host>,
-        }
+        #vis struct #builder_name<T=()>(#name<T>);
 
-        impl #builder_name {
-
+        impl #builder_name<()> {
             pub fn new() -> Self {
-                Self{
-                    host: std::sync::Arc::new(String::from(#base_host)),
-                }
+                Self(#name::<()>::new())
             }
-
-            pub fn build(self) -> #name {
-                #name::new_with_builder(self.host)
-            }
-
-            pub fn set_host(mut self, host: impl ::feign::Host) -> Self {
-                self.host = std::sync::Arc::new(host);
-                self
-            }
-
-            pub fn set_host_arc(mut self, host: std::sync::Arc<dyn ::feign::Host>) -> Self {
-                self.host = host;
-                self
-            }
-
         }
 
+        impl<T> #builder_name<T> {
+
+            pub fn build(self) -> #name<T> {
+                self.0
+            }
+
+            pub fn with_host(mut self, host: impl feign::Host) -> Self {
+                self.with_host_arc(std::sync::Arc::new(host))
+            }
+
+            pub fn with_host_arc(mut self, host: std::sync::Arc<dyn ::feign::Host>) -> Self {
+                self.0.host = host;
+                self
+            }
+
+            pub fn with_state<S: std::any::Any + core::marker::Send + core::marker::Sync + 'static>(mut self, state: S) -> #builder_name<S> {
+                #builder_name(#name::<S>{
+                    host: self.0.host,
+                    path: self.0.path,
+                    state: feign::State::new(state),
+                })
+            }
+        }
     };
 
     tokens.into()
@@ -328,6 +327,7 @@ fn gen_method(
                 let req = #builder_token(
                             req,
                             #req_body_enum,
+                            self.state.downcast_ref(),
                         ).await?;
             }
         }

@@ -1,4 +1,3 @@
-
 ## How to use
 
 ### Demo server
@@ -6,13 +5,13 @@
 A server has any restful interface (like this : find_user_by_id, new_user)
 
 ```shell
-curl 127.1:3000/user/find_by_id/1      
+curl 127.1:3000/user/find_by_id/1
 # -> {"id":1,"name":"hello"}
 
 curl -X POST 127.1:3000/user/new_user \
 -H 'Content-Type: application/json' \
 -d '{"id":1,"name":"Link"}'
-# -> "Link"                                                                        ➜  ~ 
+# -> "Link"                                                                        ➜  ~
 ```
 
 ### Dependencies
@@ -58,7 +57,7 @@ use feign::{client, ClientResult};
 
 #[client(host = "http://127.0.0.1:3000", path = "/user")]
 pub trait UserClient {
-  
+
     #[get(path = "/find_by_id/<id>")]
     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
 
@@ -128,7 +127,7 @@ pub trait UserClient {}
 #[tokio::main]
 async fn main() {
   let user_client: UserClient = UserClient::builder()
-          .set_host(String::from("http://127.0.0.1:3001"))
+          .with_host(String::from("http://127.0.0.1:3001"))
           .build();
 }
 ```
@@ -140,7 +139,7 @@ pub trait UserClient {}
 #[tokio::main]
 async fn main() {
   let user_client: UserClient = UserClient::builder()
-          .set_host_arc(Arc::new(String::from("http://127.0.0.1:3001")))
+          .with_host_arc(Arc::new(String::from("http://127.0.0.1:3001")))
           .build();
 }
 ```
@@ -151,7 +150,7 @@ implement `feign::Host` trait, or use `feign::HostRound`
 
 ```rust
 let user_client: UserClient = UserClient::builder()
-    .set_host(feign::HostRound::new(vec!["http://127.0.0.1:3031".to_string(), "http://127.0.0.1:3032".to_string()]).unwrap())
+    .with_host(feign::HostRound::new(vec!["http://127.0.0.1:3031".to_string(), "http://127.0.0.1:3032".to_string()]).unwrap())
     .build();
 ```
 
@@ -162,7 +161,9 @@ Add reqwest to dependencies and enable json feature, or use feign re_exports req
 ```toml
 reqwest = { version = "0", features = ["json"] }
 ```
+
 or
+
 ```rust
 use feign::re_exports::reqwest;
 ```
@@ -191,29 +192,36 @@ pub trait UserClient {}
 If you want check hash of json body, sign to header. Or log the request.
 
 ```rust
-async fn before_send<T: Debug>(
-  mut request_builder: reqwest::RequestBuilder,
-  body: RequestBody<T>,
+async fn before_send<Body: Debug>(
+    mut request_builder: reqwest::RequestBuilder,
+    body: RequestBody<Body>,
+    state: Option<&Arc<RwLock<i32>>>,
 ) -> ClientResult<reqwest::RequestBuilder> {
-  let (client, request) = request_builder.build_split();
-  match request {
-    Ok(request) => {
-      println!(
-        "============= (Before_send)\n\
+    if let Some(state) = state {
+        let mut lock = state.write().await;
+        *lock += 1;
+    }
+    let (client, request) = request_builder.build_split();
+    match request {
+        Ok(request) => {
+            println!(
+                "============= (Before_send)\n\
                     {:?} => {}{}\n\
                     {:?}\n\
+                    {:?}\n\
                     {:?}",
-        request.method(),
-        request.url().host_str().unwrap_or_default(),
-        request.url().path(),
-        request.headers(),
-        body
-      );
-      request_builder = reqwest::RequestBuilder::from_parts(client, request);
-      Ok(request_builder.header("a", "b"))
+                request.method(),
+                request.url().host_str().unwrap_or_default(),
+                request.url().path(),
+                request.headers(),
+                body,
+                state,
+            );
+            request_builder = reqwest::RequestBuilder::from_parts(client, request);
+            Ok(request_builder.header("a", "b"))
+        }
+        Err(err) => Err(err.into()),
     }
-    Err(err) => Err(err.into()),
-  }
 }
 ```
 
@@ -233,7 +241,9 @@ pub trait UserClient {
     async fn new_user(&self, #[json] user: &User) -> ClientResult<Option<String>>;
 }
 ```
+
 Result
+
 ```text
 ============= (Before_send)
 GET => 127.0.0.1/user/find_by_id/12
@@ -244,6 +254,7 @@ user : hello
 POST => 127.0.0.1/user/new_user
 {"content-type": "application/json"}
 Json(User { id: 123, name: "name" })
+Some(RwLock { data: 1 })
 result : name
 ```
 
@@ -256,6 +267,7 @@ serde_json = "1"
 ```
 
 create async deserializer, result type same as field method, or use generic type.
+
 ```rust
 async fn bare_string(body: String) -> ClientResult<String> {
     Ok(body)
@@ -267,6 +279,7 @@ async fn decode<T: for<'de> serde::Deserialize<'de>>(body: String) -> ClientResu
 ```
 
 set deserialize, field method result type same as deserializer
+
 ```rust
     #[get(path = "/find_by_id/<id>", deserialize = "decode")]
     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
@@ -289,6 +302,7 @@ set deserialize, field method result type same as deserializer
 ```
 
 result (Raw text)
+
 ```text
 result : "name"
 ```

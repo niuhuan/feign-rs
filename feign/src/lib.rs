@@ -1,8 +1,9 @@
+use std::any::Any;
+use std::fmt::{Debug, Display, Formatter};
+
 pub use anyhow::Result as ClientResult;
 pub use feign_macros::*;
 pub use reqwest::RequestBuilder;
-
-use std::fmt::{Debug, Display, Formatter};
 
 pub mod re_exports;
 #[cfg(test)]
@@ -73,5 +74,31 @@ impl Host for HostRound {
         let host = self.hosts.get(*index).unwrap();
         *index = (*index + 1) % self.hosts.len();
         host.as_str()
+    }
+}
+
+#[derive(Debug)]
+pub struct State<S> {
+    value: Box<dyn Any + Send + Sync + 'static>,
+    marker: std::marker::PhantomData<S>,
+}
+
+impl<S> State<S>
+where
+    S: Any + Send + Sync + 'static,
+{
+    pub fn new(value: S) -> Self {
+        Self {
+            value: Box::new(value),
+            marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn get(&self) -> &S {
+        self.value.downcast_ref().unwrap()
+    }
+
+    pub fn downcast_ref<T: Any + Send + Sync + 'static>(&self) -> Option<&T> {
+        self.value.downcast_ref()
     }
 }
