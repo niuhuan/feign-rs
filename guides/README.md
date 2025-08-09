@@ -204,13 +204,12 @@ async fn before_send<Body: Debug>(
         Ok(request) => {
             println!(
                 "============= (Before_send)\n\
-                    {:?} => {}{}\n\
+                    {:?} => {}\n\
                     {:?}\n\
                     {:?}\n\
                     {:?}",
                 request.method(),
-                request.url().host_str().unwrap_or_default(),
-                request.url().path(),
+                request.url().as_str(),
                 request.headers(),
                 body,
                 state,
