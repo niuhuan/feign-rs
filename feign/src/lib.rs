@@ -1,5 +1,6 @@
 pub use anyhow::Result as ClientResult;
 pub use feign_macros::*;
+pub use reqwest::RequestBuilder;
 
 use std::fmt::{Debug, Display, Formatter};
 
