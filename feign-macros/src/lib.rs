@@ -565,15 +565,18 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
             quote! {
                 feign::RequestBody::Form(&self.#field_name)
             },
-            quote! {&#ty},
+            quote! {feign::RequestBody<&#ty>},
         ),
         (None, Some((field_name, ty))) => (
             quote! {
                 feign::RequestBody::Json(&self.#field_name)
             },
-            quote! {&#ty},
+            quote! {feign::RequestBody<&#ty>},
         ),
-        _ => (quote! {feign::RequestBody::<()>::None}, quote! {()}),
+        _ => (
+            quote! {feign::RequestBody::<()>::None},
+            quote! {feign::RequestBody<()>},
+        ),
     };
 
     let (headers, headers_type) = match headers_field {
@@ -596,7 +599,7 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
                 #query
             }
 
-            fn body(&self) -> feign::RequestBody<#body_type> {
+            fn body(&self) -> #body_type {
                 #body
             }
 
