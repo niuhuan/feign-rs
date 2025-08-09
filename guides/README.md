@@ -191,23 +191,29 @@ pub trait UserClient {}
 If you want check hash of json body, sign to header. Or log the request.
 
 ```rust
-async fn before_send(
-  request_builder: reqwest::RequestBuilder,
-  http_method: HttpMethod,
-  host: String,
-  client_path: String,
-  request_path: String,
-  body: RequestBody,
-  headers: Option<HashMap<String, String>>,
+async fn before_send<T: Debug>(
+  mut request_builder: reqwest::RequestBuilder,
+  body: RequestBody<T>,
 ) -> ClientResult<reqwest::RequestBuilder> {
-  println!(
-    "============= (Before_send)\n\
-            {:?} => {}{}{}\n\
-            {:?}\n\
-            {:?}",
-    http_method, host, client_path, request_path, headers, body
-  );
-  Ok(request_builder.header("a", "b"))
+  let (client, request) = request_builder.build_split();
+  match request {
+    Ok(request) => {
+      println!(
+        "============= (Before_send)\n\
+                    {:?} => {}{}\n\
+                    {:?}\n\
+                    {:?}",
+        request.method(),
+        request.url().host_str().unwrap_or_default(),
+        request.url().path(),
+        request.headers(),
+        body
+      );
+      request_builder = reqwest::RequestBuilder::from_parts(client, request);
+      Ok(request_builder.header("a", "b"))
+    }
+    Err(err) => Err(err.into()),
+  }
 }
 ```
 
@@ -230,13 +236,15 @@ pub trait UserClient {
 Result
 ```text
 ============= (Before_send)
-Get => http://127.0.0.1:3000/user/find_by_id/12
+GET => 127.0.0.1/user/find_by_id/12
+{}
 None
-None
+user : hello
 ============= (Before_send)
-Post => http://127.0.0.1:3000/user/new_user
-None
-Json(Object({"id": Number(123), "name": String("name")}))
+POST => 127.0.0.1/user/new_user
+{"content-type": "application/json"}
+Json(User { id: 123, name: "name" })
+result : name
 ```
 
 ### Custom deserialize
