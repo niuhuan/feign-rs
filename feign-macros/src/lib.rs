@@ -580,7 +580,10 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
     };
 
     let (headers, headers_type) = match headers_field {
-        None => (quote! {None}, quote! {Option<()>}),
+        None => (
+            quote! {None},
+            quote! {Option<&std::collections::HashMap<String, String>>},
+        ),
         Some((field_name, ty)) => (
             quote! {
                 Some(&self.#field_name)
