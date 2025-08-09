@@ -335,10 +335,10 @@ fn gen_method(
     };
 
     let deserialize = match request.deserialize {
-        None => quote! {::feign::re_exports::serde_json::from_str(text.as_str())},
+        None => quote! {::feign::re_exports::serde_json::from_slice(&bytes)},
         Some(deserialize) => {
             let builder_token: proc_macro2::TokenStream = deserialize.parse().unwrap();
-            quote! {#builder_token(text).await}
+            quote! {#builder_token(&bytes).await}
         }
     };
 
@@ -353,11 +353,11 @@ fn gen_method(
             #req_body
             #headers
             #before_send_builder
-            let text = req
+            let bytes = req
                 .send()
                 .await?
                 .error_for_status()?
-                .text()
+                .bytes()
                 .await?;
             Ok(#deserialize?)
         }

@@ -275,12 +275,8 @@ serde_json = "1"
 create async deserializer, result type same as field method, or use generic type.
 
 ```rust
-async fn bare_string(body: String) -> ClientResult<String> {
-    Ok(body)
-}
-
-async fn decode<T: for<'de> serde::Deserialize<'de>>(body: String) -> ClientResult<T> {
-  Ok(serde_json::from_str(body.as_str())?)
+async fn decode<T: for<'de> serde::Deserialize<'de>>(body: &[u8]) -> ClientResult<T> {
+    Ok(serde_json::from_slice(body)?)
 }
 ```
 
@@ -290,13 +286,13 @@ set deserialize, field method result type same as deserializer
     #[get(path = "/find_by_id/<id>", deserialize = "decode")]
     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
 
-    #[post(path = "/new_user", deserialize = "bare_string")]
-    async fn new_user_bare_string(&self, #[json] user: &User) -> ClientResult<String>;
+    #[post(path = "/new_user", deserialize = "feign::text")]
+    async fn new_user_text(&self, #[json] user: &User) -> ClientResult<String>;
 ```
 
 ```rust
     match user_client
-        .new_user_bare_string(&User {
+        .new_user_text(&User {
             id: 123,
             name: "name".to_owned(),
         })
