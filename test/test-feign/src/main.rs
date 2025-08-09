@@ -1,37 +1,56 @@
+use feign::re_exports::{reqwest, serde_json};
+use feign::{client, Args, ClientResult, RequestBody};
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::sync::Arc;
-use feign::re_exports::{reqwest, serde_json};
-use feign::{client, ClientResult, HttpMethod, RequestBody};
 
 async fn client_builder() -> ClientResult<reqwest::Client> {
     Ok(reqwest::ClientBuilder::new().build().unwrap())
 }
 
-async fn before_send(
-    request_builder: reqwest::RequestBuilder,
-    http_method: HttpMethod,
-    host: String,
-    client_path: String,
-    request_path: String,
-    body: RequestBody,
-    headers: Option<HashMap<String, String>>,
+async fn before_send<T: Debug>(
+    mut request_builder: reqwest::RequestBuilder,
+    body: RequestBody<T>,
 ) -> ClientResult<reqwest::RequestBuilder> {
-    println!(
-        "============= (Before_send)\n\
-            {:?} => {}{}{}\n\
-            {:?}\n\
-            {:?}",
-        http_method, host, client_path, request_path, headers, body
-    );
-    Ok(request_builder.header("a", "b"))
+    let (client, request) = request_builder.build_split();
+    match request {
+        Ok(request) => {
+            println!(
+                "============= (Before_send)\n\
+                    {:?} => {}{}\n\
+                    {:?}\n\
+                    {:?}",
+                request.method(),
+                request.url().host_str().unwrap_or_default(),
+                request.url().path(),
+                request.headers(),
+                body
+            );
+            request_builder = reqwest::RequestBuilder::from_parts(client, request);
+            Ok(request_builder.header("a", "b"))
+        }
+        Err(err) => Err(err.into()),
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct User {
     pub id: i64,
     pub name: String,
+}
+
+#[derive(Args)]
+pub struct PutUserArgs {
+    #[feigen_path]
+    pub id: i64,
+    #[feigen_query]
+    pub q: String,
+    #[feigen_json]
+    pub data: User,
+    #[feigen_headers]
+    pub headers: HashMap<String, String>,
 }
 
 async fn bare_string(body: String) -> ClientResult<String> {
@@ -59,8 +78,10 @@ pub trait UserClient {
     async fn headers(
         &self,
         #[json] age: &i64,
-        #[headers] headers: HashMap<String, String>,
+        #[headers] headers: &HashMap<String, String>,
     ) -> ClientResult<Option<User>>;
+    #[put(path = "/put_user/<id>")]
+    async fn put_user(&self, #[args] args: PutUserArgs) -> ClientResult<User>;
 }
 
 #[tokio::main]
@@ -105,11 +126,27 @@ async fn main() {
     let mut headers = HashMap::<String, String>::new();
     headers.insert(String::from("C"), String::from("D"));
 
-    match user_client.headers(&12, headers).await {
+    match user_client.headers(&12, &headers).await {
         Ok(option) => match option {
             Some(user) => println!("user : {}", user.name),
             None => println!("none"),
         },
+        Err(err) => eprintln!("{}", err),
+    };
+
+    match user_client
+        .put_user(PutUserArgs {
+            id: 123,
+            q: "q".to_owned(),
+            data: User {
+                id: 456,
+                name: "name".to_owned(),
+            },
+            headers: headers,
+        })
+        .await
+    {
+        Ok(user) => println!("result : {:?}", user),
         Err(err) => eprintln!("{}", err),
     };
 }

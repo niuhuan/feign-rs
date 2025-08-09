@@ -9,8 +9,8 @@ Feign-RS (Rest client of Rust)
 ```rust
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
-
-use feign::{client, ClientResult};
+use std::collections::HashMap;
+use feign::{client, ClientResult, Args};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct User {
@@ -18,15 +18,29 @@ pub struct User {
     pub name: String,
 }
 
+#[derive(Args)]
+pub struct PutUserArgs {
+    #[feigen_path]
+    pub id: i64,
+    #[feigen_query]
+    pub q: String,
+    #[feigen_json]
+    pub data: User,
+    #[feigen_headers]
+    pub headers: HashMap<String, String>,
+}
+
 #[client(host = "http://127.0.0.1:3000", path = "/user")]
 pub trait UserClient {
-    
+
     #[get(path = "/find_by_id/<id>")]
     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
-    
+
     #[post(path = "/new_user")]
     async fn new_user(&self, #[json] user: &User) -> ClientResult<Option<String>>;
 
+    #[put(path = "/put_user/<id>")]
+    async fn put_user(&self, #[args] args: PutUserArgs) -> ClientResult<User>;
 }
 
 #[tokio::main]

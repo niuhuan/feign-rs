@@ -18,11 +18,11 @@ pub enum HttpMethod {
     Head,
 }
 
-#[derive(Clone, Debug)]
-pub enum RequestBody {
+#[derive(Debug)]
+pub enum RequestBody<T> {
     None,
-    Json(serde_json::Value),
-    Form(serde_json::Value),
+    Json(T),
+    Form(T),
 }
 
 pub trait Host: Display + Debug + Sync + Send + 'static {
