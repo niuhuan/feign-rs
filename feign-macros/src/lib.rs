@@ -239,55 +239,29 @@ fn gen_method(
         }
     };
 
-    let has_before_send = before_send.is_some();
-
-    let mut req_body = if has_before_send {
-        match body {
-            None => quote! {
-                let req_body = feign::RequestBody::None;
-            },
-            Some(Form(form)) => quote! {
-                let req_body = feign::RequestBody::Form(::feign::re_exports::serde_json::to_value(#form)?);
+    let (mut req_body, mut req_body_enum) = match body {
+        None => (quote! {}, quote! {feign::RequestBody::<()>::None}),
+        Some(Form(form)) => (
+            quote! {
                 req = req.form(#form);
             },
-            Some(Json(json)) => quote! {
-                let req_body = feign::RequestBody::Json(::feign::re_exports::serde_json::to_value(#json)?);
+            quote! {feign::RequestBody::Form(#form)},
+        ),
+        Some(Json(json)) => (
+            quote! {
                 req = req.json(#json);
             },
-        }
-    } else {
-        match body {
-            None => quote! {},
-            Some(Form(form)) => quote! {
-                req = req.form(#form);
-            },
-            Some(Json(json)) => quote! {
-                req = req.json(#json);
-            },
-        }
+            quote! {feign::RequestBody::Json(#json)},
+        ),
     };
 
-    let mut headers = if has_before_send {
-        match headers {
-            None => quote! {
-                let mut headers_opt = None;
-            },
-            Some(headers) => quote! {
-                let mut headers_opt = Some(#headers.clone());
+    let mut headers = match headers {
+        None => quote! {},
+        Some(headers) => quote! {
                 for header in #headers {
-                    req = req.header(header.0, header.1);
+                    req = req.header(header.0,header.1);
                 }
-            },
-        }
-    } else {
-        match headers {
-            None => quote! {},
-            Some(headers) => quote! {
-                    for header in #headers {
-                        req = req.header(header.0,header.1);
-                    }
-            },
-        }
+        },
     };
 
     let mut args_path = quote! {};
@@ -302,9 +276,11 @@ fn gen_method(
                 req = req.query(&query);
             }
         };
+        // allready has req_body
         if body.is_some() {
             req_body = quote! {
-                match #args.body()? {
+                #req_body
+                match #args.body() {
                     feign::RequestBody::None => {},
                     _ => {
                         return Err(feign::re_exports::anyhow::anyhow!("json or form can only once"));
@@ -313,7 +289,7 @@ fn gen_method(
             };
         } else {
             req_body = quote! {
-                let req_body = #args.body()?;
+                let req_body = #args.body();
                 match &req_body {
                     feign::RequestBody::None => {},
                     feign::RequestBody::Form(form) => {
@@ -324,31 +300,13 @@ fn gen_method(
                     },
                 }
             };
+            req_body_enum = quote! {req_body};
         }
-        headers = if has_before_send {
-            quote! {
-                    #headers
-                    if let Some(hs) = #args.headers() {
-                        match &mut headers_opt {
-                            None => {
-                                headers_opt = Some(hs.clone());
-                                for header in hs {
-                                    req = req.header(header.0, header.1);
-                                }
-                            },
-                            Some(headers) => {
-                                return Err(feign::re_exports::anyhow::anyhow!("headers can only once"));
-                            }
-                        }
-                    }
-            }
-        } else {
-            quote! {
-                #headers
-                if let Some(hs) = #args.headers() {
-                    for header in hs {
-                        req = req.header(header.0, header.1);
-                    }
+        headers = quote! {
+            #headers
+            if let Some(headers) = #args.headers() {
+                for header in headers {
+                    req = req.header(header.0, header.1);
                 }
             }
         };
@@ -372,12 +330,7 @@ fn gen_method(
             quote! {
                 let req = #builder_token(
                             req,
-                            #_http_method_token,
-                            self.host.host().to_string(),
-                            self.path.clone(),
-                            request_path.clone(),
-                            req_body,
-                            headers_opt,
+                            #req_body_enum,
                         ).await?;
             }
         }
@@ -607,21 +560,30 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
         }
     };
 
-    let body = match (form_field, json_field) {
-        (Some((field_name, _)), None) => quote! {
-            feign::RequestBody::Form(::feign::re_exports::serde_json::to_value(&self.#field_name)?)
-        },
-        (None, Some((field_name, _))) => quote! {
-            feign::RequestBody::Json(::feign::re_exports::serde_json::to_value(&self.#field_name)?)
-        },
-        _ => quote! {feign::RequestBody::None},
+    let (body, body_type) = match (form_field, json_field) {
+        (Some((field_name, ty)), None) => (
+            quote! {
+                feign::RequestBody::Form(&self.#field_name)
+            },
+            quote! {&#ty},
+        ),
+        (None, Some((field_name, ty))) => (
+            quote! {
+                feign::RequestBody::Json(&self.#field_name)
+            },
+            quote! {&#ty},
+        ),
+        _ => (quote! {feign::RequestBody::<()>::None}, quote! {()}),
     };
 
-    let headers = match headers_field {
-        None => quote! {None},
-        Some((field_name, _)) => quote! {
-            Some(&self.#field_name)
-        },
+    let (headers, headers_type) = match headers_field {
+        None => (quote! {None}, quote! {Option<()>}),
+        Some((field_name, ty)) => (
+            quote! {
+                Some(&self.#field_name)
+            },
+            quote! {Option<&#ty>},
+        ),
     };
 
     let expanded = quote! {
@@ -634,11 +596,11 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
                 #query
             }
 
-            fn body(&self) -> feign::ClientResult<feign::RequestBody> {
-                Ok(#body)
+            fn body(&self) -> feign::RequestBody<#body_type> {
+                #body
             }
 
-            fn headers(&self) -> Option<&::std::collections::HashMap<String, String>> {
+            fn headers(&self) -> #headers_type {
                 #headers
             }
         }

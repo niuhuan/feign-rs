@@ -1,31 +1,38 @@
 use feign::re_exports::{reqwest, serde_json};
-use feign::{client, Args, ClientResult, HttpMethod, RequestBody};
+use feign::{client, Args, ClientResult, RequestBody};
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::sync::Arc;
 
 async fn client_builder() -> ClientResult<reqwest::Client> {
     Ok(reqwest::ClientBuilder::new().build().unwrap())
 }
 
-async fn before_send(
-    request_builder: reqwest::RequestBuilder,
-    http_method: HttpMethod,
-    host: String,
-    client_path: String,
-    request_path: String,
-    body: RequestBody,
-    headers: Option<HashMap<String, String>>,
+async fn before_send<T: Debug>(
+    mut request_builder: reqwest::RequestBuilder,
+    body: RequestBody<T>,
 ) -> ClientResult<reqwest::RequestBuilder> {
-    println!(
-        "============= (Before_send)\n\
-            {:?} => {}{}{}\n\
-            {:?}\n\
-            {:?}",
-        http_method, host, client_path, request_path, headers, body
-    );
-    Ok(request_builder.header("a", "b"))
+    let (client, request) = request_builder.build_split();
+    match request {
+        Ok(request) => {
+            println!(
+                "============= (Before_send)\n\
+                    {:?} => {}{}\n\
+                    {:?}\n\
+                    {:?}",
+                request.method(),
+                request.url().host_str().unwrap_or_default(),
+                request.url().path(),
+                request.headers(),
+                body
+            );
+            request_builder = reqwest::RequestBuilder::from_parts(client, request);
+            Ok(request_builder.header("a", "b"))
+        }
+        Err(err) => Err(err.into()),
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -71,7 +78,7 @@ pub trait UserClient {
     async fn headers(
         &self,
         #[json] age: &i64,
-        #[headers] headers: HashMap<String, String>,
+        #[headers] headers: &HashMap<String, String>,
     ) -> ClientResult<Option<User>>;
     #[put(path = "/put_user/<id>")]
     async fn put_user(&self, #[args] args: PutUserArgs) -> ClientResult<User>;
@@ -119,7 +126,7 @@ async fn main() {
     let mut headers = HashMap::<String, String>::new();
     headers.insert(String::from("C"), String::from("D"));
 
-    match user_client.headers(&12, headers.clone()).await {
+    match user_client.headers(&12, &headers).await {
         Ok(option) => match option {
             Some(user) => println!("user : {}", user.name),
             None => println!("none"),
