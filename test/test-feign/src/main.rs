@@ -14,12 +14,10 @@ async fn client_builder() -> ClientResult<reqwest::Client> {
 async fn before_send<Body: Debug>(
     mut request_builder: reqwest::RequestBuilder,
     body: RequestBody<Body>,
-    state: Option<&Arc<RwLock<i32>>>,
+    state: &Arc<RwLock<i32>>,
 ) -> ClientResult<reqwest::RequestBuilder> {
-    if let Some(state) = state {
-        let mut lock = state.write().await;
-        *lock += 1;
-    }
+    *state.write().await += 1;
+
     let (client, request) = request_builder.build_split();
     match request {
         Ok(request) => {

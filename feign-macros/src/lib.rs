@@ -327,7 +327,7 @@ fn gen_method(
                 let req = #builder_token(
                             req,
                             #req_body_enum,
-                            self.state.downcast_ref(),
+                            self.state.downcast_ref()?,
                         ).await?;
             }
         }

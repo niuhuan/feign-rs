@@ -98,7 +98,11 @@ where
         self.value.downcast_ref().unwrap()
     }
 
-    pub fn downcast_ref<T: Any + Send + Sync + 'static>(&self) -> Option<&T> {
-        self.value.downcast_ref()
+    pub fn downcast_ref<T: Any + Send + Sync + 'static>(&self) -> ClientResult<&T> {
+        self.value.downcast_ref().ok_or(anyhow::anyhow!(format!(
+            "State downcast failed: have {}, want {}",
+            std::any::type_name::<S>(),
+            std::any::type_name::<T>()
+        )))
     }
 }
