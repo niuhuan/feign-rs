@@ -242,6 +242,15 @@ pub trait UserClient {
 }
 ```
 
+Optionally set the State:
+
+```rust
+ let user_client = UserClient::builder()
+    ...
+    .with_state(Arc::new(RwLock::new(0)))
+    .build();
+```
+
 Result
 
 ```text
