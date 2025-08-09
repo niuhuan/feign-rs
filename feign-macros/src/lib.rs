@@ -52,10 +52,7 @@ pub fn client(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let vis = &input.vis;
     let name = &input.ident;
-    let base_host = &match args.host {
-        None => String::from(""),
-        Some(value) => value,
-    };
+    let base_host = &args.host;
     let base_path = &args.path;
 
     let methods = input
@@ -412,7 +409,8 @@ enum RequestBody<'a> {
 #[derive(Debug, FromMeta)]
 struct ClientArgs {
     #[darling(default)]
-    pub host: Option<String>,
+    pub host: String,
+    #[darling(default)]
     pub path: String,
     #[darling(default)]
     pub client_builder: Option<String>,
