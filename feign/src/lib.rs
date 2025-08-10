@@ -106,3 +106,13 @@ where
         )))
     }
 }
+
+/// A deserialization function that converts bytes to a string.
+/// Example:
+/// ```ignore
+///  #[post(path = "/new_user", deserialize = "feign::text")]
+///  async fn new_user_text(&self, #[json] user: &User) -> ClientResult<String>;
+/// ```
+pub async fn text(body: &[u8]) -> ClientResult<String> {
+    Ok(String::from_utf8_lossy(body).into_owned())
+}

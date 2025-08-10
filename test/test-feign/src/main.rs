@@ -58,12 +58,8 @@ pub struct PutUserArgs {
     pub headers: HashMap<String, String>,
 }
 
-async fn bare_string(body: String) -> ClientResult<String> {
-    Ok(body)
-}
-
-async fn decode<T: for<'de> serde::Deserialize<'de>>(body: String) -> ClientResult<T> {
-    Ok(serde_json::from_str(body.as_str())?)
+async fn decode<T: for<'de> serde::Deserialize<'de>>(body: &[u8]) -> ClientResult<T> {
+    Ok(serde_json::from_slice(body)?)
 }
 
 #[client(
@@ -77,8 +73,8 @@ pub trait UserClient {
     async fn find_by_id(&self, #[path] id: i64) -> ClientResult<Option<User>>;
     #[post(path = "/new_user")]
     async fn new_user(&self, #[json] user: &User) -> ClientResult<Option<String>>;
-    #[post(path = "/new_user", deserialize = "bare_string")]
-    async fn new_user_bare_string(&self, #[json] user: &User) -> ClientResult<String>;
+    #[post(path = "/new_user", deserialize = "feign::text")]
+    async fn new_user_text(&self, #[json] user: &User) -> ClientResult<String>;
     #[get(path = "/headers")]
     async fn headers(
         &self,
@@ -119,7 +115,7 @@ async fn main() {
     };
 
     match user_client
-        .new_user_bare_string(&User {
+        .new_user_text(&User {
             id: 123,
             name: "name".to_owned(),
         })
