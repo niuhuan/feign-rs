@@ -592,19 +592,19 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl #name {
-            fn path(&self) -> Vec<(&'static str, String)> {
+            pub fn path(&self) -> Vec<(&'static str, String)> {
                 #path
             }
 
-            fn query(&self) -> Option<Vec<(&'static str, String)>> {
+            pub fn query(&self) -> Option<Vec<(&'static str, String)>> {
                 #query
             }
 
-            fn body(&self) -> #body_type {
+            pub fn body(&self) -> #body_type {
                 #body
             }
 
-            fn headers(&self) -> #headers_type {
+            pub fn headers(&self) -> #headers_type {
                 #headers
             }
         }
